@@ -220,3 +220,28 @@ fn invalid_command_arguments_never_change_installation_or_launch_options() {
         assert_eq!(fs::read(&state_path).unwrap(), state, "{args:?}");
     }
 }
+
+#[test]
+fn empty_xdg_variables_use_default_directories() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let output = command(&home)
+        .env("XDG_DATA_HOME", "")
+        .env("XDG_STATE_HOME", "")
+        .args(["install", "--apply"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        home.join(".local/share/applications/steam-shader-guard.desktop")
+            .is_file()
+    );
+    assert!(
+        home.join(".local/state/steam-shader-guard/state.json")
+            .is_file()
+    );
+}

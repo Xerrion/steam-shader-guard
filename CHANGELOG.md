@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Reject command-inappropriate arguments and duplicate options before any writes.
+- Treat empty XDG directory variables as unset, using the documented defaults.
 
 ## 0.1.0 — 2026-10-06
 

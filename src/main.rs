@@ -103,7 +103,10 @@ impl Paths {
             return fail("Home directory must be absolute");
         }
         let xdg = |key: &str, default: PathBuf| -> Result<PathBuf> {
-            let path = std::env::var_os(key).map(PathBuf::from).unwrap_or(default);
+            let path = std::env::var_os(key)
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or(default);
             if !path.is_absolute() {
                 return fail(format!("{key} must be absolute"));
             }

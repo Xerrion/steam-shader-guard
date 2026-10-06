@@ -153,7 +153,8 @@ are retained. It does not delete gigabytes of cache as a side effect of uninstal
 | Seed names and recovery report | Next to each game's `nvidia` directory |
 | Reversible settings journal | `~/.local/state/steam-shader-guard/state.json` |
 
-`XDG_DATA_HOME` and `XDG_STATE_HOME` are honored. The optional `SHADER_GUARD_HOME`
+`XDG_DATA_HOME` and `XDG_STATE_HOME` are honored; unset or empty values use the
+defaults above. The optional `SHADER_GUARD_HOME`
 variable provides an isolated home directory for tests without changing `HOME`.
 The wrapper supplies a 12 GB driver cache-size preference unless a game explicitly
 sets another value. Read-only seeds use additional disk space; Steam/driver cleanup
