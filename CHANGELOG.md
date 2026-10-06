@@ -13,6 +13,8 @@
   and `.` components instead of bypassing cache isolation.
 - Reject recovery destinations inside the source before creating directories.
 - Treat empty XDG directory variables as unset, using the documented defaults.
+- Add regression tests demonstrating the failures and covering interrupted-journal
+  recovery; document process-isolated CLI testing.
 
 ## 0.1.0 — 2026-10-06
 

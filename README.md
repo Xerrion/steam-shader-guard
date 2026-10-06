@@ -213,6 +213,12 @@ The tests use temporary directories, including an actual sparse file crossing th
 4 GiB boundary. They do not write to the real Steam configuration or launch games.
 Integration tests need an ordinary non-root user and no running Steam/Wine processes
 visible in the test process namespace. No automated tests require a GPU.
+On systems allowing unprivileged user/PID namespaces, tests can run without
+disturbing a running Steam session:
+
+```sh
+unshare --user --map-current-user --pid --fork --mount-proc cargo test --locked
+```
 
 ## Sources and license
 
