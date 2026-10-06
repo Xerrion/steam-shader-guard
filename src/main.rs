@@ -1,8 +1,11 @@
 #![cfg(target_os = "linux")]
 mod cache;
+mod cli;
 mod steam;
 mod vdf;
 
+use clap::{CommandFactory, Parser};
+use cli::{CacheOptions, Cli, EnableOptions, SteamOptions};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -238,133 +241,39 @@ fn main() {
     }
 }
 
-const HELP: &str = "Steam Shader Guard 0.1.0 (Linux, native Steam, NVIDIA)\n\
-\nUsage:\n\
-  steam-shader-guard doctor [--steam-root PATH]\n\
-  steam-shader-guard scan APPID [--source PATH] [--steam-root PATH]\n\
-  steam-shader-guard recover APPID [--source PATH] [--steam-root PATH] [--apply]\n\
-  steam-shader-guard install [--apply]\n\
-  steam-shader-guard enable APPID|--all [--account ID] [--steam-root PATH] [--apply]\n\
-  steam-shader-guard disable APPID [--apply]\n\
-  steam-shader-guard uninstall [--apply]\n\
-  steam-shader-guard run -- GAME [ARGUMENTS...]\n\
-  steam-shader-guard steam [STEAM ARGUMENTS...]\n\
-Changes are previewed unless --apply is present. Originals and generated cache\n\
-data are retained. No network access, telemetry or elevated privileges.\n";
-
-#[derive(Default)]
-struct Args {
-    apply: bool,
-    all: bool,
-    id: Option<String>,
-    account: Option<String>,
-    root: Option<PathBuf>,
-    source: Option<PathBuf>,
-}
-fn parse(command: &str, args: Vec<OsString>) -> Result<Args> {
-    let allowed: &[&str] = match command {
-        "doctor" => &["--steam-root"],
-        "scan" => &["--source", "--steam-root"],
-        "recover" => &["--source", "--steam-root", "--apply"],
-        "install" | "disable" | "uninstall" => &["--apply"],
-        "enable" => &["--all", "--account", "--steam-root", "--apply"],
-        _ => return fail("Unknown command; use --help"),
-    };
-    let mut out = Args::default();
-    let mut seen = std::collections::BTreeSet::new();
-    let mut args = args.into_iter();
-    while let Some(arg) = args.next() {
-        let arg = arg.to_str().ok_or("Option is not valid UTF-8")?;
-        if arg.starts_with('-') && (!allowed.contains(&arg) || !seen.insert(arg.to_string())) {
-            return fail(format!(
-                "Unknown or duplicate argument for {command}: {arg}"
-            ));
-        }
-        match arg {
-            "--apply" => out.apply = true,
-            "--all" => out.all = true,
-            "--steam-root" => out.root = Some(args.next().ok_or("Missing root path")?.into()),
-            "--source" => out.source = Some(args.next().ok_or("Missing cache source")?.into()),
-            "--account" => {
-                out.account = Some(
-                    args.next()
-                        .ok_or("Missing account ID")?
-                        .into_string()
-                        .map_err(|_| "Invalid account ID")?,
-                )
-            }
-            value
-                if !value.starts_with('-')
-                    && out.id.is_none()
-                    && matches!(command, "scan" | "recover" | "enable" | "disable") =>
-            {
-                out.id = Some(value.into())
-            }
-            value => return fail(format!("Unknown or duplicate argument: {value}")),
-        }
-    }
-    if let Some(id) = &out.id {
-        valid_id(id)?;
-    }
-    if let Some(id) = &out.account {
-        valid_id(id)?;
-    }
-    Ok(out)
-}
-
 fn entry() -> Result<()> {
-    let mut argv = std::env::args_os().skip(1);
-    let command = argv.next().unwrap_or_else(|| "--help".into());
-    let rest = argv.collect::<Vec<_>>();
-    if command == "--help"
-        || command == "-h"
-        || (command != "run" && command != "steam" && rest.iter().any(|s| s == "--help"))
-    {
-        println!("{HELP}");
+    let Some(command) = Cli::parse().command else {
+        Cli::command().print_help()?;
+        println!();
         return Ok(());
-    }
-    if command == "--version" {
-        println!("steam-shader-guard {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
+    };
     let paths = Paths::new()?;
-    if command == "run" {
-        return steam::run_game(&paths, rest);
-    }
-    if command == "steam" {
-        return steam::run_steam(rest);
-    }
-    let command = command.to_str().ok_or("Invalid command")?;
-    let args = parse(command, rest)?;
     match command {
-        "doctor" => steam::doctor(&paths, &args),
-        "scan" | "recover" => {
-            let id = args.id.as_deref().ok_or("Specify a Steam app ID")?;
-            let source = steam::source(&paths, &args, id)?;
-            if command == "scan" || !args.apply {
+        cli::Command::Doctor(args) => steam::doctor(&paths, &args),
+        cli::Command::Scan(args) => print_json(&cache::scan(&steam::source(&paths, &args)?)?),
+        cli::Command::Recover { cache: args, apply } => {
+            let source = steam::source(&paths, &args)?;
+            if !apply {
                 print_json(&cache::scan(&source)?)?;
-                if command == "recover" {
-                    println!(
-                        "Preview only. Re-run with --apply to create a separate verified copy."
-                    );
-                }
-            } else {
-                require_idle()?;
-                let _lock = lock(&paths)?;
-                print_json(&cache::recover(
-                    &source,
-                    &paths.app(id),
-                    cache::SHARD_LIMIT,
-                )?)?;
-                println!("Recovered cache saved. Use enable to connect the game's launch option.");
+                println!("Preview only. Re-run with --apply to create a separate verified copy.");
+                return Ok(());
             }
+            require_idle()?;
+            let _lock = lock(&paths)?;
+            print_json(&cache::recover(
+                &source,
+                &paths.app(&args.id),
+                cache::SHARD_LIMIT,
+            )?)?;
+            println!("Recovered cache saved. Use enable to connect the game's launch option.");
             Ok(())
         }
-        "install" => steam::install(&paths, args.apply),
-        "enable" => steam::enable(&paths, &args),
-        "disable" => steam::disable(&paths, args.id.as_deref(), args.apply, false),
-        "uninstall" => steam::disable(&paths, None, args.apply, true),
-        _ => fail("Unknown command; use --help"),
+        cli::Command::Install { apply } => steam::install(&paths, apply),
+        cli::Command::Enable(args) => steam::enable(&paths, &args),
+        cli::Command::Disable { id, apply } => steam::disable(&paths, Some(&id), apply, false),
+        cli::Command::Uninstall { apply } => steam::disable(&paths, None, apply, true),
+        cli::Command::Run { command } => steam::run_game(&paths, command),
+        cli::Command::Steam { arguments } => steam::run_steam(arguments),
     }
 }
 

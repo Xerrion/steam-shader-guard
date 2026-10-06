@@ -22,6 +22,12 @@ tilknytter installerede spil med tomme startindstillinger; det reparerer ikke
 deres cache automatisk. Spil med egne startindstillinger bliver sprunget over.
 Nye spil skal tilknyttes senere.
 
+Clap håndterer kommandolinjen. Brug `--help` til kommandolisten og
+`KOMMANDO --help` til hjælp om en bestemt kommando. Ugyldige eller gentagne
+argumenter giver afslutningskode 2 uden filændringer. `run` og `steam` sender
+argumenter videre, også `--help` og `--version`. Et indledende `--` er en
+separator og sendes ikke videre.
+
 Cache er stadig aktiv. Nye effekter, nye spil og driveropdateringer kan fortsat
 kræve kompilering. Den gamle Steam-genvej kan omgå indstillingen til at springe
 forbehandling over; brug den nye genvej.
