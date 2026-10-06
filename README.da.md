@@ -42,6 +42,7 @@ Læs det først, hvis du vil kontrollere det før brug.
 Du kan også følge [vejledningen til manuel download](README.md#manual-download).
 Brug samme kommando til at installere en nyere udgivelse.
 Filer, du selv ændrede, bliver ikke overskrevet.
+Den separate programfil i udgivelsen hedder `steam-shader-guard`.
 
 ### 2. Find spillets ID
 

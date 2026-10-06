@@ -67,7 +67,8 @@ jobs:
         with:
           name: release-assets
           path: |
-            dist/steam-shader-guard-*
+            dist/steam-shader-guard
+            dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 7
@@ -100,4 +101,4 @@ jobs:
           if [[ "$RELEASE_PRERELEASE" == true ]]; then
             flags+=(--prerelease --latest=false)
           fi
-          gh release create "$RELEASE_TAG" dist/steam-shader-guard-* dist/SHA256SUMS "${flags[@]}"
+          gh release create "$RELEASE_TAG" dist/steam-shader-guard dist/*.tar.gz dist/SHA256SUMS "${flags[@]}"
