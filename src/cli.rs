@@ -7,8 +7,16 @@ use std::{ffi::OsString, path::PathBuf};
     version,
     about,
     disable_help_subcommand = true,
-    after_help = "Changes are previewed unless --apply is present. Originals and generated cache\n\
-                  data are retained. No network access, telemetry or elevated privileges."
+    after_help = "Start here:\n\
+                  1. install --apply installs the tool. It does not set up any games.\n\
+                  2. doctor lists your games and the game IDs used by other commands.\n\
+                  3. recover GAME_ID --apply copies existing shaders if you want to reuse them.\n\
+                  4. enable GAME_ID --apply sets up that game.\n\
+                  5. Start 'Steam (Shader Guard)' from your application menu, then play normally.\n\n\
+                  Replace GAME_ID with a number from doctor. Do not type GAME_ID literally.\n\
+                  Fully exit Steam and any running games before copying shaders or changing game settings.\n\
+                  Commands that change files only show a plan unless you add --apply.\n\
+                  run and steam start programs immediately. Your original shader files are kept."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -17,41 +25,51 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Inspect the native Steam installation and per-game cache status
-    Doctor(SteamOptions),
-    /// Inspect a game's NVIDIA cache
+    /// Check your Steam installation and list your games
+    Doctor(DoctorOptions),
+    /// Check a game's saved shader files without changing them
     Scan(CacheOptions),
-    /// Recover intact cache records into a separate verified copy
+    /// Copy reusable saved shaders into a separate folder
     Recover {
         #[command(flatten)]
         cache: CacheOptions,
-        /// Write changes instead of showing a preview
+        /// Make these changes instead of only showing a plan
         #[arg(long)]
         apply: bool,
     },
-    /// Install the program and the Steam (Shader Guard) menu entry
+    /// Install the tool and add Steam (Shader Guard) to your application menu
+    #[command(
+        after_help = "This installs the tool only. It does not set up games, copy shaders or start Steam.\n\
+                      Next: run doctor to find your game's ID, then follow the setup steps in --help."
+    )]
     Install {
-        /// Write changes instead of showing a preview
+        /// Make these changes instead of only showing a plan
         #[arg(long)]
         apply: bool,
     },
-    /// Connect one game or all installed games to Shader Guard
+    /// Set up one game or all installed games to use Shader Guard
+    #[command(
+        after_help = "Run install --apply first. Use a game ID from doctor, or --all for all eligible games.\n\
+                      Games with existing launch options are left unchanged.\n\
+                      This does not copy existing shaders. Use recover first if you want to keep using them.\n\
+                      After setup, start 'Steam (Shader Guard)' from your application menu."
+    )]
     Enable(EnableOptions),
-    /// Restore a game's tracked launch options across accounts
+    /// Stop using Shader Guard for one game and keep its saved shaders
     Disable {
-        #[arg(value_name = "APPID", value_parser = parse_id)]
+        #[arg(value_name = "GAME_ID", value_parser = parse_id)]
         id: String,
-        /// Write changes instead of showing a preview
+        /// Make these changes instead of only showing a plan
         #[arg(long)]
         apply: bool,
     },
-    /// Restore tracked settings and remove the installed program
+    /// Remove the tool and undo its game settings without deleting shaders
     Uninstall {
-        /// Write changes instead of showing a preview
+        /// Make these changes instead of only showing a plan
         #[arg(long)]
         apply: bool,
     },
-    /// Launch a game with its private NVIDIA cache. Use run -- GAME [ARGUMENTS...]
+    /// Start a game through Shader Guard. Steam normally calls this for you
     #[command(disable_help_flag = true)]
     Run {
         #[arg(
@@ -63,7 +81,7 @@ pub enum Command {
         )]
         command: Vec<OsString>,
     },
-    /// Launch native Steam without NVIDIA replay. All arguments go to Steam
+    /// Start Steam without NVIDIA shader pre-processing
     #[command(disable_help_flag = true)]
     Steam {
         #[arg(
@@ -77,36 +95,50 @@ pub enum Command {
 
 #[derive(Args, Default)]
 pub struct SteamOptions {
-    /// Path to a nonstandard native Steam installation
+    /// Steam folder, only if the tool cannot find it automatically
     #[arg(long = "steam-root", value_name = "PATH")]
     pub root: Option<PathBuf>,
 }
 
 #[derive(Args)]
+pub struct DoctorOptions {
+    #[command(flatten)]
+    pub steam: SteamOptions,
+    /// Show a JSON report instead of the readable summary (for scripts)
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args)]
 pub struct CacheOptions {
-    #[arg(value_name = "APPID", value_parser = parse_id)]
+    /// Game ID from doctor, for example 2357570
+    #[arg(value_name = "GAME_ID", value_parser = parse_id)]
     pub id: String,
-    /// NVIDIA cache tree to inspect instead of the game's live cache
+    /// Use saved shader files from this folder instead of Steam's folder
     #[arg(long, value_name = "PATH")]
     pub source: Option<PathBuf>,
     #[command(flatten)]
     pub steam: SteamOptions,
+    /// Show a JSON report instead of the readable summary (for scripts)
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
 #[group(required = true, multiple = false, args = ["id", "all"])]
 pub struct EnableOptions {
-    #[arg(value_name = "APPID", value_parser = parse_id)]
+    /// Game ID from doctor, for example 2357570
+    #[arg(value_name = "GAME_ID", value_parser = parse_id)]
     pub id: Option<String>,
-    /// Select all installed games except Steam runtime and Proton tools
+    /// Set up all installed games that have no launch options
     #[arg(long)]
     pub all: bool,
-    /// Numeric account directory under Steam's userdata folder
+    /// Choose a Steam account when this computer has more than one
     #[arg(long, value_name = "ID", value_parser = parse_id)]
     pub account: Option<String>,
     #[command(flatten)]
     pub steam: SteamOptions,
-    /// Write changes instead of showing a preview
+    /// Make these changes instead of only showing a plan
     #[arg(long)]
     pub apply: bool,
 }
@@ -146,6 +178,9 @@ mod tests {
     fn accepts_existing_commands_and_command_specific_options() {
         for args in [
             vec!["doctor", "--steam-root", "/Steam"],
+            vec!["doctor", "--json"],
+            vec!["scan", "42", "--json"],
+            vec!["recover", "42", "--json", "--apply"],
             vec!["scan", "42", "--source", "/cache", "--steam-root", "/Steam"],
             vec![
                 "recover",
@@ -258,6 +293,11 @@ mod tests {
             vec!["enable", "42", "--account"],
             vec!["enable", "42", "--account", "100", "--account", "100"],
             vec!["enable", "42", "--source", "/cache"],
+            vec!["enable", "42", "--json"],
+            vec!["install", "--json"],
+            vec!["disable", "42", "--json"],
+            vec!["uninstall", "--json"],
+            vec!["doctor", "--json", "--json"],
             vec!["disable"],
             vec!["disable", "42", "--account", "100"],
             vec!["uninstall", "42"],
@@ -284,9 +324,35 @@ mod tests {
             for command in ["scan", "recover", "enable", "disable"] {
                 assert!(parse(&[command, id]).is_err(), "{command} {id:?}");
             }
+
             assert!(parse(&["enable", "--all", "--account", id]).is_err());
         }
         assert!(parse(&["scan", "18446744073709551615"]).is_ok());
+    }
+
+    #[test]
+    fn inspection_output_is_readable_by_default_and_json_is_opt_in() {
+        for json in [false, true] {
+            let mut doctor_args = vec!["doctor"];
+            if json {
+                doctor_args.push("--json");
+            }
+            let Some(Command::Doctor(options)) = parse(&doctor_args).unwrap().command else {
+                panic!("Expected doctor command");
+            };
+            assert_eq!(options.json, json);
+            for name in ["scan", "recover"] {
+                let mut args = vec![name, "42"];
+                if json {
+                    args.push("--json");
+                }
+                let cache = match parse(&args).unwrap().command.unwrap() {
+                    Command::Scan(cache) | Command::Recover { cache, .. } => cache,
+                    _ => panic!("Expected cache command"),
+                };
+                assert_eq!(cache.json, json);
+            }
+        }
     }
 
     #[test]

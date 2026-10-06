@@ -59,13 +59,17 @@ fn free_space(path: &Path) -> Result<u64> {
     result
         .f_bavail
         .checked_mul(result.f_frsize)
-        .ok_or_else(|| "Free-space overflow".into())
+        .ok_or_else(|| "The available disk space could not be calculated safely.".into())
 }
 fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
     if path.is_symlink() {
-        return fail("Refusing to replace a symlink");
+        return fail(
+            "This file is a symbolic link. It was not replaced, to protect the file it points to.",
+        );
     }
-    let parent = path.parent().ok_or("Missing parent directory")?;
+    let parent = path
+        .parent()
+        .ok_or("The file's destination has no parent folder.")?;
     fs::create_dir_all(parent)?;
     let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
     tmp.as_file()
@@ -87,6 +91,35 @@ fn print_json(value: &impl Serialize) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
+fn progress(message: impl std::fmt::Display) {
+    eprintln!("Shader Guard: {message}");
+}
+fn report_summary(reports: &[cache::Report]) {
+    let records: usize = reports.iter().map(|r| r.records).sum();
+    let wrapped: usize = reports.iter().map(|r| r.wrapped_offsets).sum();
+    progress(format_args!(
+        "Cache file pairs inspected: {}. Records: {records}. Wrapped offsets: {wrapped}.",
+        reports.len()
+    ));
+}
+fn cache_report(reports: &[cache::Report], json: bool) -> Result<()> {
+    if json {
+        return print_json(&reports);
+    }
+    let records: usize = reports.iter().map(|r| r.records).sum();
+    let wrapped: usize = reports.iter().map(|r| r.wrapped_offsets).sum();
+    if records == 0 {
+        println!("No saved shader entries were found. You can skip the copy step.");
+    } else {
+        println!("Sets of saved shader files checked: {}.", reports.len());
+        if wrapped == 0 {
+            println!("No broken file positions were found.");
+        } else {
+            println!("Found {wrapped} stored entries with broken file positions.");
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone)]
 struct Paths {
@@ -100,10 +133,12 @@ impl Paths {
         let home = PathBuf::from(
             std::env::var_os("SHADER_GUARD_HOME")
                 .or_else(|| std::env::var_os("HOME"))
-                .ok_or("HOME is missing")?,
+                .ok_or("Your home folder could not be found because HOME is not set. Run this command from your normal desktop terminal.")?,
         );
         if !home.is_absolute() {
-            return fail("Home directory must be absolute");
+            return fail(
+                "The home folder path must start with '/'. Check HOME or SHADER_GUARD_HOME.",
+            );
         }
         let xdg = |key: &str, default: PathBuf| -> Result<PathBuf> {
             let path = std::env::var_os(key)
@@ -111,7 +146,9 @@ impl Paths {
                 .map(PathBuf::from)
                 .unwrap_or(default);
             if !path.is_absolute() {
-                return fail(format!("{key} must be absolute"));
+                return fail(format!(
+                    "{key} must be a full folder path starting with '/'."
+                ));
             }
             Ok(path)
         };
@@ -162,7 +199,9 @@ struct ManagedApp {
 fn load_state(paths: &Paths) -> Result<State> {
     let file = paths.state_file();
     if file.is_symlink() {
-        return fail("State file is a symlink");
+        return fail(
+            "Shader Guard's saved settings file is a symbolic link. It was not used, to protect another file.",
+        );
     }
     if file.exists() {
         Ok(serde_json::from_slice(&fs::read(file)?)?)
@@ -173,13 +212,17 @@ fn load_state(paths: &Paths) -> Result<State> {
 fn lock(paths: &Paths) -> Result<File> {
     // Mutation only: never acquire/create state during doctor or a preview.
     if unsafe { libc::geteuid() } == 0 {
-        return fail("Run as your desktop user, without sudo");
+        return fail(
+            "Do not use sudo or the root account. Run this command as the user who plays games on this desktop.",
+        );
     }
     fs::create_dir_all(&paths.state)?;
     fs::set_permissions(&paths.state, fs::Permissions::from_mode(0o700))?;
     let path = paths.state.join("lock");
     if path.is_symlink() {
-        return fail("Lock path is a symlink");
+        return fail(
+            "Shader Guard's operation lock is a symbolic link. No changes were started, to protect another file.",
+        );
     }
     let file = OpenOptions::new()
         .create(true)
@@ -188,7 +231,9 @@ fn lock(paths: &Paths) -> Result<File> {
         .open(path)?;
     // The file descriptor is owned by file, which holds the lock until drop.
     if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        return fail("Another Shader Guard operation is running");
+        return fail(
+            "Another Shader Guard command is still making changes. Wait for it to finish, then try again.",
+        );
     }
     Ok(file)
 }
@@ -217,7 +262,7 @@ fn require_idle() -> Result<()> {
             || name.ends_with(".exe")
         {
             return fail(
-                "Close Steam and Wine games before changing configuration or recovering live caches",
+                "Fully exit Steam and any running games before changing game settings or copying saved shaders. Closing only the Steam window may leave it running.",
             );
         }
     }
@@ -229,7 +274,9 @@ fn valid_id(id: &str) -> Result<()> {
         || !id.bytes().all(|c| c.is_ascii_digit())
         || id.parse::<u64>()? == 0
     {
-        return fail("App ID must be a positive decimal number");
+        return fail(
+            "The game or account ID must be a number greater than zero. Run doctor to find your game's ID.",
+        );
     }
     Ok(())
 }
@@ -249,23 +296,68 @@ fn entry() -> Result<()> {
     };
     let paths = Paths::new()?;
     match command {
-        cli::Command::Doctor(args) => steam::doctor(&paths, &args),
-        cli::Command::Scan(args) => print_json(&cache::scan(&steam::source(&paths, &args)?)?),
-        cli::Command::Recover { cache: args, apply } => {
+        cli::Command::Doctor(args) => steam::doctor(&paths, &args.steam, args.json),
+        cli::Command::Scan(args) => {
+            progress(format_args!(
+                "Checking saved shader files for game {}. Nothing will be changed.",
+                args.id
+            ));
             let source = steam::source(&paths, &args)?;
+            progress(format_args!("Reading from: {}", source.display()));
+            let reports = cache::scan(&source)?;
+            cache_report(&reports, args.json)?;
+            if args.json {
+                report_summary(&reports);
+            }
+            progress(format_args!(
+                "Check finished. No files changed. To copy reusable shaders, run recover {} --apply before the first Shader Guard game launch.",
+                args.id
+            ));
+            Ok(())
+        }
+        cli::Command::Recover { cache: args, apply } => {
+            progress(if apply {
+                "Preparing to copy saved shaders. Your original files will be kept."
+            } else {
+                "Showing the shader copy plan. Nothing will be changed."
+            });
+            let source = steam::source(&paths, &args)?;
+            let destination = paths.app(&args.id);
+            progress(format_args!("Reading from: {}", source.display()));
+            progress(format_args!(
+                "Shader Guard will save its copy in: {}",
+                destination.join("nvidia").display()
+            ));
             if !apply {
-                print_json(&cache::scan(&source)?)?;
-                println!("Preview only. Re-run with --apply to create a separate verified copy.");
+                let reports = cache::scan(&source)?;
+                cache_report(&reports, args.json)?;
+                if args.json {
+                    report_summary(&reports);
+                }
+                progress(format_args!(
+                    "No files changed. Add --apply to copy the reusable shaders: recover {} --apply.",
+                    args.id
+                ));
                 return Ok(());
             }
+            progress(
+                "Checking for Steam and game processes that could still be using these files.",
+            );
             require_idle()?;
             let _lock = lock(&paths)?;
-            print_json(&cache::recover(
-                &source,
-                &paths.app(&args.id),
-                cache::SHARD_LIMIT,
-            )?)?;
-            println!("Recovered cache saved. Use enable to connect the game's launch option.");
+            let reports = cache::recover(&source, &destination, cache::SHARD_LIMIT)?;
+            if args.json {
+                print_json(&reports)?;
+                report_summary(&reports);
+            }
+            progress(format_args!(
+                "Shader copy finished and checked. Saved in: {}.",
+                destination.join("nvidia").display()
+            ));
+            progress(format_args!(
+                "The game's settings have not changed. Next: enable {} --apply, then start 'Steam (Shader Guard)' from your application menu.",
+                args.id
+            ));
             Ok(())
         }
         cli::Command::Install { apply } => steam::install(&paths, apply),
