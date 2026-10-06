@@ -205,6 +205,8 @@ Future Steam versions may change the replay control; check `shader_log.txt` for
 
 ## Build and test
 
+These commands require a source checkout or GitHub's separate source archive.
+
 ```sh
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
@@ -248,14 +250,22 @@ packager rejects executables with a dynamic interpreter/dependency or a mismatch
 version. Assets are:
 
 - `steam-shader-guard-<version>-x86_64-unknown-linux-musl.tar.gz`
-- `SHA256SUMS`, containing the archive's SHA-256 checksum
+- `steam-shader-guard-<version>-x86_64-unknown-linux-musl`, the standalone executable
+- `SHA256SUMS`, containing the archive and executable checksums
 
-Download both assets to the same directory and run `sha256sum --check SHA256SUMS`
-before extracting the archive. The extracted directory also contains a freshly
-generated `SHA256SUMS` for the executable, source, tests, workflows, documentation
-and dependency notices; run the same command inside that directory to check them.
-The packager regenerates these checksums rather than copying the source tree's
-original checksum manifest. It excludes build outputs and Python bytecode.
+The archive contains the executable, user guides, changelog, and required license
+notices. It does not contain source, tests, workflows, or build tooling. GitHub
+provides separate source archives.
+
+Download the archive and `SHA256SUMS` to the same directory. Run
+`sha256sum --check --ignore-missing SHA256SUMS` before extracting the archive.
+Its internal `SHA256SUMS` covers the executable, documentation, and license
+notices. Run `sha256sum --check SHA256SUMS` inside the extracted directory.
+The packager generates fresh checksums instead of copying the repository manifest.
+
+For a direct executable download, verify it against `SHA256SUMS` with the same
+`--ignore-missing` command. Mark it executable with `chmod +x` and rename it to
+`steam-shader-guard`. Dependency license notices are available in the archive.
 
 To build the same package locally (Python 3.11+ and `readelf` from binutils are
 needed only for release tooling, not for the program at runtime):
@@ -266,8 +276,9 @@ python3 -m unittest discover -s tests -p 'test_release.py' -v
 RUSTUP_TOOLCHAIN=1.99.0 python3 scripts/release.py package v0.1.0
 ```
 
-Replace `v0.1.0` with the current package version. The archive and its checksum
-are written under `dist/`; packaging does not publish a release or create a tag.
+Replace `v0.1.0` with the current package version. The archive, standalone
+executable, and checksums are written under `dist/`. Packaging does not publish
+a release or create a tag.
 Only the final publication job has repository write permissions; build and test
 jobs are read-only, and all external workflow actions are pinned to commit SHAs.
 

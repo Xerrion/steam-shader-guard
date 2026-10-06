@@ -42,5 +42,8 @@ netværkskald eller uploads på egen hånd.
 GitHub Actions tester med Rust **1.99.0** på x86-64 Linux (GNU og musl).
 Versionstags, der svarer præcist til `Cargo.toml`, udgiver automatisk et statisk
 musl-arkiv efter beståede tests. Hent både arkivet og `SHA256SUMS` fra udgivelsen,
-og kør `sha256sum --check SHA256SUMS`, før du pakker arkivet ud.
+og kør `sha256sum --check --ignore-missing SHA256SUMS`, før du pakker arkivet ud.
+Arkivet indeholder programmet, vejledninger og licenser, ikke kildekoden.
+Programmet kan også hentes som en separat fil. GitHub tilbyder kildekoden som
+separate arkiver.
 Se [bygge- og udgivelsesvejledningen](README.md#releases) for detaljer.

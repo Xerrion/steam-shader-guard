@@ -13,8 +13,9 @@ version: 1.85; the minimum toolchain has not been separately tested.
 - `cargo fmt --check`.
 - `cargo build --release --locked` for the unreleased fixes on the host target.
 - Original release executable: stripped, statically linked x86-64 Linux PIE.
-- Original release archive includes source, lockfile, tests, documentation and notices;
-  no private Steam configuration or shader-cache payloads.
+- The initial archive included project source. Corrected release packages contain
+  the executable, user documentation, and license notices only. A regression test
+  rejects source, manifests, tests, workflows, and build tooling in the archive.
 
 Coverage includes an actual sparse BIN file crossing 4 GiB, copy verification,
 bounded shard output, rejected malformed input, failed recovery cleanup,

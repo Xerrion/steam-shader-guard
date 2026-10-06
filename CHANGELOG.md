@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Publish a standalone executable and a runtime archive without project source,
+  tests, workflows, or build tooling. Keep user documentation and license notices.
+- Generate SHA-256 checksums for both downloadable assets.
+
 ## 0.1.0 (2026-10-06)
 
 - Initial Rust release for native Steam on Linux with NVIDIA.
@@ -25,5 +31,5 @@
 - Add regression tests demonstrating the failures and covering interrupted-journal
   recovery; document process-isolated CLI testing.
 - GitHub Actions CI on Rust 1.99.0 for formatting, Clippy and GNU/musl tests.
-- Version-tag releases with verified static executables, source, notices and
+- Version-tag releases with verified static executables, documentation, notices and
   regenerated SHA-256 manifests; prerelease tags are supported.
