@@ -484,8 +484,8 @@ pub fn game_environment(
         .get("__GL_SHADER_DISK_CACHE_PATH")
         .map(String::as_str)
         .unwrap_or("");
-    let steam_suffix = format!("/steamapps/shadercache/{id}/nvidiav1");
-    if !existing.is_empty() && !existing.ends_with(&steam_suffix) {
+    let steam_suffix = format!("steamapps/shadercache/{id}/nvidiav1");
+    if !existing.is_empty() && !Path::new(existing).ends_with(&steam_suffix) {
         return Ok(out);
     }
     let directory = paths.app(id).join("nvidia");

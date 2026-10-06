@@ -267,6 +267,22 @@ fn game_cache_is_isolated_and_explicit_overrides_survive() {
     assert_eq!(steam::game_environment(&p, "42", &custom).unwrap(), custom);
 }
 #[test]
+fn steam_cache_path_suffix_is_compared_as_a_path() {
+    let t = tempfile::tempdir().unwrap();
+    let p = fake_paths(t.path());
+    for path in [
+        "/games/steamapps/shadercache/42/nvidiav1/",
+        "/games/steamapps//shadercache/42/./nvidiav1",
+    ] {
+        let env = BTreeMap::from([("__GL_SHADER_DISK_CACHE_PATH".into(), path.into())]);
+        let out = steam::game_environment(&p, "42", &env).unwrap();
+        assert_eq!(
+            out["__GL_SHADER_DISK_CACHE_PATH"],
+            p.app("42").join("nvidia").to_str().unwrap()
+        );
+    }
+}
+#[test]
 fn reads_exact_seed_names_and_rejects_path_traversal() {
     let t = tempfile::tempdir().unwrap();
     let p = fake_paths(t.path());

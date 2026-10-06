@@ -9,6 +9,8 @@
   contents match the originally installed menu entry.
 - Preserve both installed and pending hashes so interrupted installation updates
   can be retried or uninstalled safely.
+- Recognize equivalent Steam cache paths containing trailing or repeated slashes
+  and `.` components instead of bypassing cache isolation.
 - Treat empty XDG directory variables as unset, using the documented defaults.
 
 ## 0.1.0 — 2026-10-06
