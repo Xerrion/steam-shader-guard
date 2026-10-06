@@ -12,8 +12,6 @@ Its Steam shortcut skips NVIDIA shader pre-processing.
 It does not promise higher FPS or remove all shader compilation.
 New effects, game updates and driver updates can still require compilation.
 
-[Dansk vejledning](README.da.md)
-
 ## Before you start
 
 - Use the regular Linux Steam app with NVIDIA graphics. Flatpak and Snap Steam
