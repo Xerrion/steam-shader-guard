@@ -1,10 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-06)
 
-- Publish a standalone executable and a runtime archive without project source,
-  tests, workflows, or build tooling. Keep user documentation and license notices.
-- Generate SHA-256 checksums for both downloadable assets.
+- Install or update with a curl command on x86-64 Linux. The installer checks the
+  downloaded program before running it. It does not change game settings.
+- Rewrite both guides around setting up a game, with explanations of game IDs,
+  optional shader copying and the new Steam shortcut.
+- Show readable game lists and shader checks by default. Add `--json` to
+  `doctor`, `scan` or `recover` for reports used by scripts.
+- Explain what each command is doing, why it stopped and what to do next.
+  Game setup reports how many games it changed and which ones it left unchanged.
+- Offer both a standalone program and an archive with guides and license notices.
+  Downloads do not include source code or build tools.
+- Name the standalone program `steam-shader-guard`.
+- Provide checksums for both downloads so users can check the files.
 
 ## 0.1.0 (2026-10-06)
 
