@@ -69,10 +69,9 @@ class ReleaseTests(unittest.TestCase):
                             release.verify_binary(self.root / "binary", "0.1.0")
 
     def test_archive_contents_checksums_and_cleanup(self):
-        for filename in release.PACKAGE_FILES:
-            if filename != "Cargo.toml":
-                (self.root / filename).write_text(filename, encoding="utf-8")
-        for directory in release.PACKAGE_DIRECTORIES:
+        for filename in (*release.PACKAGE_FILES, "Cargo.lock", "VALIDATION.md", ".gitignore"):
+            (self.root / filename).write_text(filename, encoding="utf-8")
+        for directory in (".github", "scripts", "src", "tests", "third-party"):
             folder = self.root / directory
             folder.mkdir()
             (folder / "fixture").write_text(directory, encoding="utf-8")
@@ -88,23 +87,22 @@ class ReleaseTests(unittest.TestCase):
         archive_path = release.create_archive(self.root, binary, "0.1.0")
         expected_name = f"steam-shader-guard-0.1.0-{release.TARGET}"
         self.assertEqual(archive_path.name, f"{expected_name}.tar.gz")
-        self.assertEqual(
-            (self.root / "dist" / "SHA256SUMS").read_text(encoding="utf-8"),
-            f"{release.checksum(archive_path)}  {archive_path.name}\n",
-        )
-        self.assertEqual(
-            {path.name for path in (self.root / "dist").iterdir()},
-            {archive_path.name, "SHA256SUMS"},
-        )
         with tarfile.open(archive_path) as archive:
             files = {
                 member.name.removeprefix(f"{expected_name}/"): member
                 for member in archive.getmembers()
                 if member.isfile()
             }
-            expected = set(release.PACKAGE_FILES) | {
-                f"{directory}/fixture" for directory in release.PACKAGE_DIRECTORIES
-            } | {"steam-shader-guard", "SHA256SUMS"}
+            expected = {
+                "README.md",
+                "README.da.md",
+                "LICENSE",
+                "CHANGELOG.md",
+                "THIRD_PARTY_NOTICES.md",
+                "third-party/fixture",
+                "steam-shader-guard",
+                "SHA256SUMS",
+            }
             self.assertEqual(set(files), expected)
             self.assertEqual(files["steam-shader-guard"].mode, 0o755)
             sums = archive.extractfile(files["SHA256SUMS"]).read().decode("utf-8")
@@ -114,6 +112,18 @@ class ReleaseTests(unittest.TestCase):
                 digest, filename = line.split("  ", 1)
                 payload = archive.extractfile(files[filename]).read()
                 self.assertEqual(hashlib.sha256(payload).hexdigest(), digest)
+        standalone = self.root / "dist" / expected_name
+        self.assertEqual(standalone.read_bytes(), binary.read_bytes())
+        self.assertEqual(standalone.stat().st_mode & 0o777, 0o755)
+        self.assertEqual(
+            (self.root / "dist" / "SHA256SUMS").read_text(encoding="utf-8"),
+            f"{release.checksum(archive_path)}  {archive_path.name}\n"
+            f"{release.checksum(standalone)}  {standalone.name}\n",
+        )
+        self.assertEqual(
+            {path.name for path in (self.root / "dist").iterdir()},
+            {archive_path.name, standalone.name, "SHA256SUMS"},
+        )
 
 
 if __name__ == "__main__":
