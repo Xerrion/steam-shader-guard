@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- GitHub Actions CI on Rust 1.99.0 for formatting, Clippy and GNU/musl tests.
+
 ## 0.1.0 — 2026-10-06
 
 - Initial Rust release for native Steam on Linux with NVIDIA.

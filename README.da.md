@@ -32,3 +32,5 @@ spil er lukket. Shaderdata bevares. Egne ændringer overskrives ikke.
 Læs [den fulde vejledning](README.md) for flere konti, særlige cacheplaceringer,
 eksisterende startindstillinger og begrænsninger. Programmet foretager ingen
 netværkskald eller uploads på egen hånd.
+
+GitHub Actions tester med Rust **1.99.0** på x86-64 Linux (GNU og musl).

@@ -191,6 +191,11 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked
 ```
 
+GitHub Actions runs formatting, Clippy and the locked unit/integration tests on
+Rust **1.99.0**, for both GNU and musl x86-64 Linux. CI runs on pull requests,
+pushes to `main`, and manual dispatch. The declared Rust 1.85 minimum remains
+untested; the CI toolchain pin is not a change to that minimum.
+
 For the static x86-64 build:
 
 ```sh
