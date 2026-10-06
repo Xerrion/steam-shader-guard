@@ -4,6 +4,8 @@
 
 - Reject command-inappropriate arguments and duplicate options before any writes.
 - Match Steam VDF keys case-insensitively and reject case-variant duplicate keys.
+- Preserve both installed and pending hashes so interrupted installation updates
+  can be retried or uninstalled safely.
 - Treat empty XDG directory variables as unset, using the documented defaults.
 
 ## 0.1.0 — 2026-10-06

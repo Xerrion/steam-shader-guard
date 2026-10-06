@@ -141,6 +141,13 @@ struct ManagedFile {
     before: Option<Vec<u8>>,
     before_mode: u32,
     after_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pending_hash: Option<String>,
+}
+impl ManagedFile {
+    fn matches_hash(&self, hash: &str) -> bool {
+        self.after_hash == hash || self.pending_hash.as_deref() == Some(hash)
+    }
 }
 #[derive(Serialize, Deserialize)]
 struct ManagedApp {

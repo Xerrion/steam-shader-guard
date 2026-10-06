@@ -50,6 +50,8 @@ and Wine games before recovering caches or editing launch options.
 `install` prints its plan first. With `--apply` it installs the program under
 `~/.local/bin` and adds **Steam (Shader Guard)** to your application menu.
 Your existing Steam shortcuts and shell configuration stay unchanged.
+If an installation update fails, fix the reported filesystem error and rerun
+`install --apply`; the journal recognizes both sides of an interrupted file update.
 
 For an affected game, replace `2357570` with its Steam app ID:
 

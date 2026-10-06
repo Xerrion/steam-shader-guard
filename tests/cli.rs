@@ -1,5 +1,6 @@
 use std::{
     fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -274,6 +275,34 @@ fn case_variant_manual_launch_reference_blocks_uninstall() {
 }
 
 #[test]
+fn failed_install_update_can_be_retried() {
+    use sha2::{Digest, Sha256};
+
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    run(&home, &["install", "--apply"]);
+    let binary = home.join(".local/bin/steam-shader-guard");
+    let old = b"previous managed executable";
+    fs::write(&binary, old).unwrap();
+    let state_path = home.join(".local/state/steam-shader-guard/state.json");
+    let mut state: serde_json::Value =
+        serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+    state["files"][binary.to_str().unwrap()]["after_hash"] =
+        format!("{:x}", Sha256::digest(old)).into();
+    fs::write(&state_path, serde_json::to_vec(&state).unwrap()).unwrap();
+    let directory = binary.parent().unwrap();
+    let permissions = fs::metadata(directory).unwrap().permissions();
+    fs::set_permissions(directory, fs::Permissions::from_mode(0o555)).unwrap();
+    let output = command(&home).args(["install", "--apply"]).output();
+    fs::set_permissions(directory, permissions).unwrap();
+    assert!(!output.unwrap().status.success());
+    assert_eq!(fs::read(&binary).unwrap(), old);
+    run(&home, &["install", "--apply"]);
+    assert_eq!(fs::read(binary).unwrap(), fs::read(BIN).unwrap());
+    run(&home, &["uninstall", "--apply"]);
+}
+
+#[test]
 fn empty_xdg_variables_use_default_directories() {
     let t = tempfile::tempdir().unwrap();
     let home = t.path().join("home");
@@ -296,4 +325,30 @@ fn empty_xdg_variables_use_default_directories() {
         home.join(".local/state/steam-shader-guard/state.json")
             .is_file()
     );
+}
+
+#[test]
+fn published_pending_install_can_be_retried_or_uninstalled() {
+    for action in ["install", "uninstall"] {
+        let t = tempfile::tempdir().unwrap();
+        let home = t.path().join("home");
+        run(&home, &["install", "--apply"]);
+        let binary = home.join(".local/bin/steam-shader-guard");
+        let state_path = home.join(".local/state/steam-shader-guard/state.json");
+        let mut state: serde_json::Value =
+            serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+        let entry = &mut state["files"][binary.to_str().unwrap()];
+        entry["pending_hash"] = entry["after_hash"].clone();
+        entry["after_hash"] = "previous version hash".into();
+        fs::write(&state_path, serde_json::to_vec(&state).unwrap()).unwrap();
+        run(&home, &[action, "--apply"]);
+        if action == "install" {
+            let state: serde_json::Value =
+                serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+            assert!(state["files"][binary.to_str().unwrap()]["pending_hash"].is_null());
+            assert_eq!(fs::read(binary).unwrap(), fs::read(BIN).unwrap());
+        } else {
+            assert!(!binary.exists());
+        }
+    }
 }

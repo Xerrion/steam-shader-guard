@@ -184,20 +184,24 @@ pub fn install(paths: &Paths, apply: bool) -> Result<()> {
         ),
         (icon, desktop.into_bytes(), 0o644),
     ];
+    let mut current_hashes = BTreeMap::new();
     for (path, _, _) in &updates {
         if path.is_symlink() {
             return fail("Installation target is a symlink");
         }
-        if path.exists()
-            && !state
+        if path.try_exists()? {
+            let current_hash = cache::digest_file(path)?;
+            if !state
                 .files
                 .get(path)
-                .is_some_and(|e| cache::digest_file(path).ok().as_ref() == Some(&e.after_hash))
-        {
-            return fail(format!(
-                "Preserving existing or modified file: {}",
-                path.display()
-            ));
+                .is_some_and(|e| e.matches_hash(&current_hash))
+            {
+                return fail(format!(
+                    "Preserving existing or modified file: {}",
+                    path.display()
+                ));
+            }
+            current_hashes.insert(path.clone(), current_hash);
         }
     }
     for (path, bytes, mode) in updates {
@@ -205,10 +209,23 @@ pub fn install(paths: &Paths, apply: bool) -> Result<()> {
             before: None,
             before_mode: mode,
             after_hash: String::new(),
+            pending_hash: None,
         });
-        entry.after_hash = hash(&bytes);
+        if let Some(current_hash) = current_hashes.remove(&path) {
+            entry.after_hash = current_hash;
+        }
+        entry.pending_hash = Some(hash(&bytes));
         atomic_json(&paths.state_file(), &state)?; // Journal before each reversible write.
         atomic_write(&path, &bytes, mode)?;
+        let entry = state
+            .files
+            .get_mut(&path)
+            .ok_or("Missing managed file journal")?;
+        entry.after_hash = entry
+            .pending_hash
+            .take()
+            .ok_or("Missing pending file hash")?;
+        atomic_json(&paths.state_file(), &state)?;
     }
     println!(
         "Installed. Start Steam through 'Steam (Shader Guard)'. Enable each game's cache profile separately."
@@ -268,7 +285,7 @@ pub fn enable(paths: &Paths, args: &Args) -> Result<()> {
     if !state
         .files
         .get(&paths.bin)
-        .is_some_and(|e| cache::digest_file(&paths.bin).ok().as_ref() == Some(&e.after_hash))
+        .is_some_and(|e| cache::digest_file(&paths.bin).is_ok_and(|hash| e.matches_hash(&hash)))
     {
         return fail("Run install --apply first; the managed program must be present");
     }
@@ -400,7 +417,7 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         for (path, record) in &state.files {
             if path != &paths.bin
                 && path.exists()
-                && cache::digest_file(path)? != record.after_hash
+                && !record.matches_hash(&cache::digest_file(path)?)
                 && fs::read_to_string(path)
                     .unwrap_or_default()
                     .contains("steam-shader-guard")
@@ -415,7 +432,7 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
             if !path.exists() {
                 continue;
             }
-            if path.is_symlink() || cache::digest_file(&path)? != record.after_hash {
+            if path.is_symlink() || !record.matches_hash(&cache::digest_file(&path)?) {
                 println!("Preserved modified file: {}", path.display());
                 continue;
             }
