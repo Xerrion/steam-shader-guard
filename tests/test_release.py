@@ -112,7 +112,7 @@ class ReleaseTests(unittest.TestCase):
                 digest, filename = line.split("  ", 1)
                 payload = archive.extractfile(files[filename]).read()
                 self.assertEqual(hashlib.sha256(payload).hexdigest(), digest)
-        standalone = self.root / "dist" / expected_name
+        standalone = self.root / "dist" / "steam-shader-guard"
         self.assertEqual(standalone.read_bytes(), binary.read_bytes())
         self.assertEqual(standalone.stat().st_mode & 0o777, 0o755)
         self.assertEqual(

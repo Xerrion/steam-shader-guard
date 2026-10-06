@@ -44,6 +44,6 @@ Versionstags, der svarer præcist til `Cargo.toml`, udgiver automatisk et statis
 musl-arkiv efter beståede tests. Hent både arkivet og `SHA256SUMS` fra udgivelsen,
 og kør `sha256sum --check --ignore-missing SHA256SUMS`, før du pakker arkivet ud.
 Arkivet indeholder programmet, vejledninger og licenser, ikke kildekoden.
-Programmet kan også hentes som en separat fil. GitHub tilbyder kildekoden som
-separate arkiver.
+Programmet kan også hentes som en separat fil med navnet `steam-shader-guard`.
+GitHub tilbyder kildekoden som separate arkiver.
 Se [bygge- og udgivelsesvejledningen](README.md#releases) for detaljer.

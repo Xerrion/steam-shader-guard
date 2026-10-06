@@ -69,7 +69,7 @@ def create_archive(root: Path, binary: Path, version: str) -> Path:
     dist.mkdir(exist_ok=True)
     name = f"steam-shader-guard-{version}-{TARGET}"
     archive_path = dist / f"{name}.tar.gz"
-    standalone = dist / name
+    standalone = dist / "steam-shader-guard"
     with tempfile.TemporaryDirectory(prefix=".package-", dir=dist) as staging:
         package = Path(staging) / name
         package.mkdir()
