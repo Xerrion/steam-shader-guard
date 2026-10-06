@@ -191,6 +191,11 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked
 ```
 
+GitHub Actions runs formatting, Clippy and the locked unit/integration tests on
+Rust **1.99.0**, for both GNU and musl x86-64 Linux. CI runs on pull requests,
+pushes to `main`, and manual dispatch. The declared Rust 1.85 minimum remains
+untested; the CI toolchain pin is not a change to that minimum.
+
 For the static x86-64 build:
 
 ```sh
@@ -202,6 +207,43 @@ The tests use temporary directories, including an actual sparse file crossing th
 4 GiB boundary. They do not write to the real Steam configuration or launch games.
 Integration tests need an ordinary non-root user and no running Steam/Wine processes
 visible in the test process namespace. No automated tests require a GPU.
+
+## Releases
+
+Pushing a tag that exactly matches the package version in `Cargo.toml`, such as
+`v0.1.0`, automatically publishes a GitHub release after the full CI suite passes.
+Update the package version, lockfile, changelog and relevant validation/notices
+before tagging a release. Tags such as `v0.1.0-rc.1` publish prereleases when the
+manifest has the matching prerelease version; they are not marked as latest.
+Existing releases are not overwritten on a rerun.
+
+Release builds use Rust **1.99.0** and the `x86_64-unknown-linux-musl` target. The
+packager rejects executables with a dynamic interpreter/dependency or a mismatched
+version. Assets are:
+
+- `steam-shader-guard-<version>-x86_64-unknown-linux-musl.tar.gz`
+- `SHA256SUMS`, containing the archive's SHA-256 checksum
+
+Download both assets to the same directory and run `sha256sum --check SHA256SUMS`
+before extracting the archive. The extracted directory also contains a freshly
+generated `SHA256SUMS` for the executable, source, tests, workflows, documentation
+and dependency notices; run the same command inside that directory to check them.
+The packager regenerates these checksums rather than copying the source tree's
+original checksum manifest. It excludes build outputs and Python bytecode.
+
+To build the same package locally (Python 3.11+ and `readelf` from binutils are
+needed only for release tooling, not for the program at runtime):
+
+```sh
+rustup toolchain install 1.99.0 --profile minimal --target x86_64-unknown-linux-musl
+python3 -m unittest discover -s tests -p 'test_release.py' -v
+RUSTUP_TOOLCHAIN=1.99.0 python3 scripts/release.py package v0.1.0
+```
+
+Replace `v0.1.0` with the current package version. The archive and its checksum
+are written under `dist/`; packaging does not publish a release or create a tag.
+Only the final publication job has repository write permissions; build and test
+jobs are read-only, and all external workflow actions are pinned to commit SHAs.
 
 ## Sources and license
 

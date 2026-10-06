@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Match tag to Cargo package version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="$(python3 scripts/release.py version "$RELEASE_TAG")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          version_without_build="${version%%+*}"
+          if [[ "$version_without_build" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  checks:
+    name: Release checks
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build static Linux archive
+    needs: [validate, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: 1.99.0
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install Rust and musl target
+        run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN"
+          --profile minimal --target x86_64-unknown-linux-musl --no-self-update
+      - name: Build, verify, and package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/release.py package "$RELEASE_TAG"
+      - name: Upload release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-assets
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub release
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release assets
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-assets
+          path: dist
+      - name: Verify downloaded archive
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          flags=(--verify-tag --title "Steam Shader Guard $RELEASE_VERSION" --generate-notes)
+          if [[ "$RELEASE_PRERELEASE" == true ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS "${flags[@]}"

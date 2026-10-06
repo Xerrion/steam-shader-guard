@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- GitHub Actions CI on Rust 1.99.0 for formatting, Clippy and GNU/musl tests.
+- Version-tag releases with verified static executables, source, notices and
+  regenerated SHA-256 manifests; prerelease tags are supported.
+
 ## 0.1.0 — 2026-10-06
 
 - Initial Rust release for native Steam on Linux with NVIDIA.
