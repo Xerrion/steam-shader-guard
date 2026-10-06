@@ -444,7 +444,7 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         for (path, record) in &state.files {
             if path != &paths.bin
                 && path.try_exists()?
-                && !record.matches_hash(&cache::digest_file(path)?)
+                && (path.is_symlink() || !record.matches_hash(&cache::digest_file(path)?))
                 && fs::read_to_string(path)?.contains("steam-shader-guard")
             {
                 return fail(

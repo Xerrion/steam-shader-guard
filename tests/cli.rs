@@ -421,3 +421,24 @@ fn published_pending_install_can_be_retried_or_uninstalled() {
         }
     }
 }
+
+#[test]
+fn symlinked_menu_entry_blocks_removal_of_program_it_still_references() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    run(&home, &["install", "--apply"]);
+    let desktop = home.join(".local/share/applications/steam-shader-guard.desktop");
+    let moved = home.join("custom.desktop");
+    fs::rename(&desktop, &moved).unwrap();
+    std::os::unix::fs::symlink(&moved, &desktop).unwrap();
+    let output = command(&home)
+        .args(["uninstall", "--apply"])
+        .output()
+        .unwrap();
+    assert!(
+        home.join(".local/bin/steam-shader-guard").is_file(),
+        "Removed program but preserved a symlinked menu entry that still launches it"
+    );
+    assert!(!output.status.success());
+    assert!(desktop.is_symlink());
+}

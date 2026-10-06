@@ -5,6 +5,8 @@
 - Reject command-inappropriate arguments and duplicate options before any writes.
 - Match Steam VDF keys case-insensitively and reject case-variant duplicate keys.
 - Keep the executable when uninstall cannot inspect known accounts or menu entries.
+- Keep the executable when a symlinked menu entry still references it, even if its
+  contents match the originally installed menu entry.
 - Preserve both installed and pending hashes so interrupted installation updates
   can be retried or uninstalled safely.
 - Treat empty XDG directory variables as unset, using the documented defaults.

@@ -134,8 +134,9 @@ Close Steam and Wine games first:
 
 The tool restores tracked launch options only when they still match its changes.
 It preserves subsequent edits and refuses to remove the program when a known
-modified/manual launch option still references it. It also refuses removal when
-permission or read errors prevent those checks. Remove manual references first,
+modified/manual launch option or modified menu entry still references it, including
+a menu entry replaced with a symlink. It also refuses removal when permission or
+read errors prevent those checks. Remove manual references first,
 including custom launchers outside the Steam accounts known to the tool.
 Steam VDF keys are matched case-insensitively; unrelated text is preserved.
 
