@@ -133,24 +133,33 @@ fn wrapper_preserves_game_arguments_help_and_exit_status() {
 }
 #[test]
 fn untracked_manual_launch_reference_blocks_binary_removal() {
-    let t = tempfile::tempdir().unwrap();
-    let home = t.path().join("home");
-    let config = setup(&home);
-    run(&home, &["install", "--apply"]);
-    let s = fs::read_to_string(&config).unwrap().replace(
-        "gamemoderun %command%",
-        "steam-shader-guard run -- %command%",
-    );
-    fs::write(config, s).unwrap();
-    assert!(
-        !command(&home)
+    for account in ["100", "0"] {
+        let t = tempfile::tempdir().unwrap();
+        let home = t.path().join("home");
+        setup(&home);
+        let accounts = home.join(".local/share/Steam/userdata");
+        if account != "100" {
+            fs::rename(accounts.join("100"), accounts.join(account)).unwrap();
+        }
+        fs::write(accounts.join("unrelated-file"), "keep").unwrap();
+        let config = accounts.join(account).join("config/localconfig.vdf");
+        run(&home, &["install", "--apply"]);
+        let s = fs::read_to_string(&config).unwrap().replace(
+            "gamemoderun %command%",
+            "steam-shader-guard run -- %command%",
+        );
+        fs::write(config, s).unwrap();
+        let output = command(&home)
             .args(["uninstall", "--apply"])
             .output()
-            .unwrap()
-            .status
-            .success()
-    );
-    assert!(home.join(".local/bin/steam-shader-guard").exists());
+            .unwrap();
+        assert!(
+            home.join(".local/bin/steam-shader-guard").exists(),
+            "Account {account}"
+        );
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("still references Shader Guard"));
+    }
 }
 
 #[test]
@@ -275,6 +284,34 @@ fn case_variant_manual_launch_reference_blocks_uninstall() {
 }
 
 #[test]
+fn uninstall_retains_program_when_known_accounts_cannot_be_inspected() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let config = setup(&home);
+    run(&home, &["install", "--apply"]);
+    run(&home, &["enable", "42", "--apply"]);
+    let original = fs::read(&config).unwrap();
+    let accounts = home.join(".local/share/Steam/userdata");
+    let permissions = fs::metadata(&accounts).unwrap().permissions();
+    fs::set_permissions(&accounts, fs::Permissions::from_mode(0o000)).unwrap();
+    let output = command(&home).args(["uninstall", "--apply"]).output();
+    fs::set_permissions(&accounts, permissions).unwrap();
+    let output = output.unwrap();
+    assert!(
+        home.join(".local/bin/steam-shader-guard").is_file(),
+        "Removed program without inspecting the inaccessible account"
+    );
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .to_lowercase()
+            .contains("permission denied")
+    );
+    assert_eq!(fs::read(&config).unwrap(), original);
+    run(&home, &["uninstall", "--apply"]);
+}
+
+#[test]
 fn failed_install_update_can_be_retried() {
     use sha2::{Digest, Sha256};
 
@@ -325,6 +362,38 @@ fn empty_xdg_variables_use_default_directories() {
         home.join(".local/state/steam-shader-guard/state.json")
             .is_file()
     );
+}
+
+#[test]
+fn uninstall_refuses_inaccessible_untracked_accounts_and_menu_entries() {
+    for relative in [
+        ".local/share/Steam",
+        ".local/share/Steam/userdata",
+        ".local/share/Steam/userdata/100/config",
+        ".local/share/applications",
+    ] {
+        let t = tempfile::tempdir().unwrap();
+        let home = t.path().join("home");
+        let config = setup(&home);
+        run(&home, &["install", "--apply"]);
+        let text = fs::read_to_string(&config).unwrap().replace(
+            "gamemoderun %command%",
+            "steam-shader-guard run -- %command%",
+        );
+        if relative.contains("Steam") {
+            fs::write(&config, text).unwrap();
+        }
+        let directory = home.join(relative);
+        let permissions = fs::metadata(&directory).unwrap().permissions();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o000)).unwrap();
+        let output = command(&home).args(["uninstall", "--apply"]).output();
+        fs::set_permissions(&directory, permissions).unwrap();
+        assert!(
+            home.join(".local/bin/steam-shader-guard").is_file(),
+            "Removed program without inspecting inaccessible {relative}"
+        );
+        assert!(!output.unwrap().status.success(), "{relative}");
+    }
 }
 
 #[test]
