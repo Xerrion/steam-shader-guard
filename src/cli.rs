@@ -4,9 +4,8 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Parser)]
 #[command(
-    name = "steam-shader-guard",
     version,
-    about = "Steam Shader Guard (Linux, native Steam, NVIDIA)",
+    about,
     disable_help_subcommand = true,
     after_help = "Changes are previewed unless --apply is present. Originals and generated cache\n\
                   data are retained. No network access, telemetry or elevated privileges."
@@ -130,6 +129,17 @@ mod tests {
     #[test]
     fn command_schema_is_consistent() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn command_metadata_comes_from_cargo() {
+        let command = Cli::command();
+        assert_eq!(command.get_name(), env!("CARGO_PKG_NAME"));
+        assert_eq!(command.get_version(), Some(env!("CARGO_PKG_VERSION")));
+        assert_eq!(
+            command.get_about().map(|about| about.to_string()),
+            Some(env!("CARGO_PKG_DESCRIPTION").to_owned())
+        );
     }
 
     #[test]
