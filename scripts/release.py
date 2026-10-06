@@ -11,17 +11,13 @@ import tomllib
 
 TARGET = "x86_64-unknown-linux-musl"
 PACKAGE_FILES = (
-    ".gitignore",
-    "Cargo.toml",
-    "Cargo.lock",
     "README.md",
     "README.da.md",
     "LICENSE",
     "CHANGELOG.md",
     "THIRD_PARTY_NOTICES.md",
-    "VALIDATION.md",
 )
-PACKAGE_DIRECTORIES = (".github", "scripts", "src", "tests", "third-party")
+PACKAGE_DIRECTORIES = ("third-party",)
 
 
 def release_version(root: Path, tag: str) -> str:
@@ -73,6 +69,7 @@ def create_archive(root: Path, binary: Path, version: str) -> Path:
     dist.mkdir(exist_ok=True)
     name = f"steam-shader-guard-{version}-{TARGET}"
     archive_path = dist / f"{name}.tar.gz"
+    standalone = dist / name
     with tempfile.TemporaryDirectory(prefix=".package-", dir=dist) as staging:
         package = Path(staging) / name
         package.mkdir()
@@ -93,8 +90,11 @@ def create_archive(root: Path, binary: Path, version: str) -> Path:
         (package / "SHA256SUMS").write_text(sums, encoding="utf-8")
         with tarfile.open(archive_path, "w:gz") as archive:
             archive.add(package, arcname=name)
+    shutil.copy2(binary, standalone)
     (dist / "SHA256SUMS").write_text(
-        f"{checksum(archive_path)}  {archive_path.name}\n", encoding="utf-8"
+        f"{checksum(archive_path)}  {archive_path.name}\n"
+        f"{checksum(standalone)}  {standalone.name}\n",
+        encoding="utf-8",
     )
     return archive_path
 
