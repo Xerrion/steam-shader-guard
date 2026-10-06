@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Reject command-inappropriate arguments and duplicate options before any writes.
+- Match Steam VDF keys case-insensitively and reject case-variant duplicate keys.
 - Treat empty XDG directory variables as unset, using the documented defaults.
 
 ## 0.1.0 — 2026-10-06

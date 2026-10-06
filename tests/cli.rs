@@ -222,6 +222,58 @@ fn invalid_command_arguments_never_change_installation_or_launch_options() {
 }
 
 #[test]
+fn enable_and_disable_support_case_variant_steam_keys() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let config = setup(&home);
+    let text = fs::read_to_string(&config)
+        .unwrap()
+        .replace("UserLocalConfigStore", "userlocalconfigstore")
+        .replace("Software", "software")
+        .replace("Valve", "valve")
+        .replace("Steam", "steam")
+        .replace("LaunchOptions", "launchoptions");
+    fs::write(&config, text).unwrap();
+    run(&home, &["install", "--apply"]);
+    run(&home, &["enable", "--all", "--apply"]);
+    let changed = fs::read_to_string(&config).unwrap();
+    assert!(changed.contains("run -- %command%"));
+    assert!(changed.contains("\"launchoptions\" \"gamemoderun %command%\""));
+    run(&home, &["disable", "42", "--apply"]);
+    assert!(
+        !fs::read_to_string(config)
+            .unwrap()
+            .contains("steam-shader-guard")
+    );
+}
+
+#[test]
+fn case_variant_manual_launch_reference_blocks_uninstall() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let config = setup(&home);
+    run(&home, &["install", "--apply"]);
+    let text = fs::read_to_string(&config)
+        .unwrap()
+        .replace("LaunchOptions", "LAUNCHOPTIONS")
+        .replace(
+            "gamemoderun %command%",
+            "steam-shader-guard run -- %command%",
+        );
+    fs::write(&config, &text).unwrap();
+    let output = command(&home)
+        .args(["uninstall", "--apply"])
+        .output()
+        .unwrap();
+    assert!(
+        home.join(".local/bin/steam-shader-guard").is_file(),
+        "Removed program despite a case-variant launch option referencing it"
+    );
+    assert!(!output.status.success());
+    assert_eq!(fs::read_to_string(config).unwrap(), text);
+}
+
+#[test]
 fn empty_xdg_variables_use_default_directories() {
     let t = tempfile::tempdir().unwrap();
     let home = t.path().join("home");

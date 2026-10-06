@@ -391,7 +391,7 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         for config in configs.into_iter().filter(|p| p.is_file()) {
             let doc = Vdf::parse(fs::read_to_string(config)?)?;
             if let Some(Value::Map(apps)) = doc.get(&PREFIX) {
-                if apps.values().any(|value| matches!(value, Value::Map(fields) if matches!(fields.get("LaunchOptions"), Some(Value::Text(option)) if option.contains("steam-shader-guard")))) {
+                if apps.values().any(|value| matches!(value, Value::Map(fields) if matches!(fields.get("launchoptions"), Some(Value::Text(option)) if option.contains("steam-shader-guard")))) {
                     return fail("A Steam launch option still references Shader Guard; remove it manually before uninstalling");
                 }
             }

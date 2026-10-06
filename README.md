@@ -134,6 +134,7 @@ The tool restores tracked launch options only when they still match its changes.
 It preserves subsequent edits and refuses to remove the program when a known
 modified/manual launch option still references it. Remove manual references first,
 including custom launchers outside the Steam accounts known to the tool.
+Steam VDF keys are matched case-insensitively; unrelated text is preserved.
 
 Options are command-specific, as shown by `--help`; unsupported or duplicate
 options are errors rather than silently ignored. In particular, `uninstall` does

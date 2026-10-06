@@ -219,6 +219,29 @@ fn vdf_refuses_ambiguous_or_broken_input() {
     }
 }
 #[test]
+fn vdf_keys_are_case_insensitive_without_rewriting_unrelated_bytes() {
+    let text = "\"ROOT\" { \"KeepCase\" \"KeepValue\" \"launchoptions\" \"old\" }";
+    let doc = vdf::Vdf::parse(text.into()).unwrap();
+    assert_eq!(doc.text(&["root", "LaunchOptions"]), Some("old"));
+    let changed = doc.set(&["Root", "LaunchOptions"], Some("new")).unwrap();
+    assert!(changed.contains("\"KeepCase\" \"KeepValue\""));
+    let parsed = vdf::Vdf::parse(changed).unwrap();
+    assert_eq!(parsed.text(&["ROOT", "LAUNCHOPTIONS"]), Some("new"));
+    let removed = parsed.set(&["root", "launchoptions"], None).unwrap();
+    assert!(
+        vdf::Vdf::parse(removed)
+            .unwrap()
+            .get(&["ROOT", "LaunchOptions"])
+            .is_none()
+    );
+}
+#[test]
+fn vdf_rejects_case_variant_duplicate_keys() {
+    assert!(
+        vdf::Vdf::parse("\"LaunchOptions\" \"first\" \"launchoptions\" \"second\"".into()).is_err()
+    );
+}
+#[test]
 fn game_cache_is_isolated_and_explicit_overrides_survive() {
     let t = tempfile::tempdir().unwrap();
     let p = fake_paths(t.path());
