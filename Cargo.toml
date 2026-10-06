@@ -1,0 +1,20 @@
+[package]
+name = "steam-shader-guard"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Inspect, recover and isolate NVIDIA shader caches used by native Steam on Linux"
+license = "MIT"
+publish = false
+
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
+
