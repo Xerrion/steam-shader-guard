@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replace custom CLI parsing with Clap, including generated command help,
+  command-specific validation and argument errors with exit status 2.
+- Preserve OS-native paths and forwarded game/Steam arguments. An initial `--`
+  is a CLI separator for both forwarding commands.
 - Reject command-inappropriate arguments and duplicate options before any writes.
 - Match Steam VDF keys case-insensitively and reject case-variant duplicate keys.
 - Keep the executable when uninstall cannot inspect known accounts or menu entries.

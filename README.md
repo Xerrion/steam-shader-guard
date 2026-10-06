@@ -140,10 +140,19 @@ read errors prevent those checks. Remove manual references first,
 including custom launchers outside the Steam accounts known to the tool.
 Steam VDF keys are matched case-insensitively; unrelated text is preserved.
 
-Options are command-specific, as shown by `--help`; unsupported or duplicate
-options are errors rather than silently ignored. In particular, `uninstall` does
-not accept an app ID or account selector. Use `disable APPID --apply` to disconnect
-one game; it restores that game's tracked entries across accounts.
+Clap parses the CLI arguments and generates help. Use `--help` for the command
+list or `COMMAND --help` for command-specific options. Unsupported or duplicate
+options are errors rather than silently ignored. Argument errors exit with status
+2 before the tool resolves its data directories or changes files. Shader Guard
+runtime errors exit with status 1. In particular, `uninstall` does not accept an
+app ID or account selector. Use `disable APPID --apply` to disconnect one game.
+It restores that game's tracked entries across accounts.
+
+The `run` and `steam` commands forward arguments to the game and Steam,
+respectively. Their `--help` and `--version` arguments belong to the launched
+program, not Shader Guard. An initial standalone `--` separates CLI options from
+forwarded arguments. Later `--` values remain unchanged. The parser preserves the
+original bytes of paths and forwarded arguments, including non-UTF-8 values.
 
 Original caches, recovered seed files, new shaders and the small state journal
 are retained. It does not delete gigabytes of cache as a side effect of uninstalling.
