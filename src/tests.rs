@@ -160,6 +160,19 @@ fn failed_recovery_publishes_nothing() {
     assert_eq!(fs::read_dir(dest.parent().unwrap()).unwrap().count(), 0);
 }
 #[test]
+fn rejected_recovery_does_not_create_directories_inside_source() {
+    let t = tempfile::tempdir().unwrap();
+    let source = t.path().join("source");
+    fixture(&source, 1);
+    for parent in [source.clone(), t.path().join("source-link")] {
+        if parent != source {
+            symlink(&source, &parent).unwrap();
+        }
+        assert!(cache::recover(&source, &parent.join("new/42"), 120).is_err());
+        assert!(!source.join("new").exists());
+    }
+}
+#[test]
 fn rename_cannot_overwrite_existing_directory() {
     let t = tempfile::tempdir().unwrap();
     let a = t.path().join("a");

@@ -11,6 +11,7 @@
   can be retried or uninstalled safely.
 - Recognize equivalent Steam cache paths containing trailing or repeated slashes
   and `.` components instead of bypassing cache isolation.
+- Reject recovery destinations inside the source before creating directories.
 - Treat empty XDG directory variables as unset, using the documented defaults.
 
 ## 0.1.0 — 2026-10-06
