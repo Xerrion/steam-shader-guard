@@ -15,6 +15,9 @@
 - Treat empty XDG directory variables as unset, using the documented defaults.
 - Add regression tests demonstrating the failures and covering interrupted-journal
   recovery; document process-isolated CLI testing.
+- GitHub Actions CI on Rust 1.99.0 for formatting, Clippy and GNU/musl tests.
+- Version-tag releases with verified static executables, source, notices and
+  regenerated SHA-256 manifests; prerelease tags are supported.
 
 ## 0.1.0 — 2026-10-06
 
