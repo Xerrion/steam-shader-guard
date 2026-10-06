@@ -38,6 +38,75 @@ fn setup(home: &Path) -> PathBuf {
     file
 }
 #[test]
+fn help_and_version_succeed_without_valid_home_or_side_effects() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    for args in [
+        vec![],
+        vec!["--help"],
+        vec!["-h"],
+        vec!["--version"],
+        vec!["doctor", "--help"],
+        vec!["scan", "--help"],
+        vec!["recover", "--help"],
+        vec!["install", "-h"],
+        vec!["enable", "--help"],
+        vec!["disable", "--help"],
+        vec!["uninstall", "--help"],
+    ] {
+        let output = command(&home)
+            .env("SHADER_GUARD_HOME", "relative-home")
+            .env("XDG_DATA_HOME", "relative-data")
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}");
+        assert!(output.stderr.is_empty(), "{args:?}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        if args == ["--version"] {
+            assert_eq!(
+                text,
+                format!("steam-shader-guard {}\n", env!("CARGO_PKG_VERSION"))
+            );
+        } else {
+            assert!(text.contains("Usage:"), "{args:?}: {text}");
+        }
+        assert!(!home.exists(), "{args:?}");
+    }
+}
+
+#[test]
+fn argument_errors_report_diagnostics_before_reading_environment() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    for args in [
+        vec!["unknown"],
+        vec!["scan"],
+        vec!["scan", "0"],
+        vec!["enable", "42", "--all"],
+        vec!["install", "--apply", "--apply"],
+        vec!["doctor", "--unknown"],
+        vec!["run", "--"],
+    ] {
+        let output = command(&home)
+            .env("SHADER_GUARD_HOME", "relative-home")
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(error.contains("error:"), "{args:?}: {error}");
+        assert!(
+            error.contains("Usage:") || error.contains("For more information, try '--help'."),
+            "{args:?}: {error}"
+        );
+        assert!(!error.contains("Home directory"), "{args:?}: {error}");
+        assert!(!home.exists(), "{args:?}");
+    }
+}
+
+#[test]
 fn preview_has_no_side_effects_and_unknown_flags_fail() {
     let t = tempfile::tempdir().unwrap();
     let home = t.path().join("home");
@@ -118,13 +187,16 @@ fn wrapper_preserves_game_arguments_help_and_exit_status() {
             "one two",
             "literal $;",
             "--help",
+            "--version",
+            "--",
+            "",
         ])
         .output()
         .unwrap();
     assert_eq!(o.status.code(), Some(7));
     assert_eq!(
         String::from_utf8(o.stdout).unwrap(),
-        "one two\nliteral $;\n--help\n"
+        "one two\nliteral $;\n--help\n--version\n--\n\n"
     );
     assert!(
         home.join(".local/share/steam-shader-guard/games/42/nvidia")

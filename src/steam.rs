@@ -10,11 +10,11 @@ pub struct Game {
     pub cache: PathBuf,
 }
 
-fn root(paths: &Paths, args: &Args) -> Result<PathBuf> {
+fn root(paths: &Paths, args: &SteamOptions) -> Result<PathBuf> {
     find_root(paths, args)?
         .ok_or_else(|| "Native Steam installation not found; use --steam-root PATH".into())
 }
-fn find_root(paths: &Paths, args: &Args) -> Result<Option<PathBuf>> {
+fn find_root(paths: &Paths, args: &SteamOptions) -> Result<Option<PathBuf>> {
     let candidates = args.root.clone().map(|p| vec![p]).unwrap_or_else(|| {
         vec![
             paths.home.join(".local/share/Steam"),
@@ -95,13 +95,13 @@ pub fn games(root: &Path) -> Result<Vec<Game>> {
     }
     Ok(result.into_values().collect())
 }
-pub fn source(paths: &Paths, args: &Args, id: &str) -> Result<PathBuf> {
+pub fn source(paths: &Paths, args: &CacheOptions) -> Result<PathBuf> {
     if let Some(path) = &args.source {
         return Ok(path.canonicalize()?);
     }
-    games(&root(paths, args)?)?
+    games(&root(paths, &args.steam)?)?
         .into_iter()
-        .find(|g| g.appid == id)
+        .find(|g| g.appid == args.id)
         .map(|g| g.cache)
         .ok_or_else(|| "Installed application not found".into())
 }
@@ -127,7 +127,7 @@ fn account_config(root: &Path, account: Option<&str>) -> Result<PathBuf> {
     }
     Ok(path)
 }
-pub fn doctor(paths: &Paths, args: &Args) -> Result<()> {
+pub fn doctor(paths: &Paths, args: &SteamOptions) -> Result<()> {
     let steam_root = root(paths, args)?;
     let mut output = Vec::new();
     for game in games(&steam_root)? {
@@ -241,11 +241,11 @@ pub fn install(paths: &Paths, apply: bool) -> Result<()> {
     );
     Ok(())
 }
-pub fn enable(paths: &Paths, args: &Args) -> Result<()> {
+pub fn enable(paths: &Paths, args: &EnableOptions) -> Result<()> {
     if args.all == args.id.is_some() {
         return fail("Choose one app ID or --all");
     }
-    let steam_root = root(paths, args)?;
+    let steam_root = root(paths, &args.steam)?;
     let config = account_config(&steam_root, args.account.as_deref())?;
     let selected = games(&steam_root)?
         .into_iter()
@@ -408,7 +408,7 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         // Also inspect accounts in the default Steam installation, if available.
         let mut configs = known_configs;
         let mut roots = state.steam_roots.clone();
-        if let Some(steam_root) = find_root(paths, &Args::default())? {
+        if let Some(steam_root) = find_root(paths, &SteamOptions::default())? {
             roots.insert(steam_root);
         }
         for steam_root in roots {
@@ -516,10 +516,7 @@ pub fn game_environment(
     }
     Ok(out)
 }
-pub fn run_game(paths: &Paths, mut args: Vec<OsString>) -> Result<()> {
-    if args.first().is_some_and(|a| a == "--") {
-        args.remove(0);
-    }
+pub fn run_game(paths: &Paths, args: Vec<OsString>) -> Result<()> {
     if args.is_empty() {
         return fail("Use run -- GAME [ARGUMENTS...]");
     }
