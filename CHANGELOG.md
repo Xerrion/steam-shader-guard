@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reject command-inappropriate arguments and duplicate options before any writes.
+
 ## 0.1.0 — 2026-10-06
 
 - Initial Rust release for native Steam on Linux with NVIDIA.

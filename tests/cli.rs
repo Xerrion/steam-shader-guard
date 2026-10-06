@@ -187,3 +187,36 @@ fn custom_steam_root_remains_known_after_disabling_a_game() {
     );
     assert!(home.join(".local/bin/steam-shader-guard").exists());
 }
+
+#[test]
+fn invalid_command_arguments_never_change_installation_or_launch_options() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let config = setup(&home);
+    run(&home, &["install", "--apply"]);
+    run(&home, &["enable", "42", "--apply"]);
+    let original = fs::read(&config).unwrap();
+    let state_path = home.join(".local/state/steam-shader-guard/state.json");
+    let state = fs::read(&state_path).unwrap();
+    for args in [
+        vec!["uninstall", "42", "--apply"],
+        vec!["disable", "42", "--account", "999", "--apply"],
+        vec!["disable", "42", "--all", "--apply"],
+        vec!["uninstall", "--steam-root", "/missing", "--apply"],
+        vec!["install", "--all", "--apply"],
+        vec!["install", "42", "--apply"],
+        vec!["install", "--apply", "--apply"],
+        vec!["enable", "42", "--source", "/missing", "--apply"],
+        vec!["enable", "42", "--account", "100", "--account", "999"],
+        vec!["doctor", "--apply"],
+    ] {
+        let output = command(&home).args(&args).output().unwrap();
+        assert!(
+            home.join(".local/bin/steam-shader-guard").is_file(),
+            "Invalid arguments removed the installed program: {args:?}"
+        );
+        assert!(!output.status.success(), "Unexpectedly accepted {args:?}");
+        assert_eq!(fs::read(&config).unwrap(), original, "{args:?}");
+        assert_eq!(fs::read(&state_path).unwrap(), state, "{args:?}");
+    }
+}

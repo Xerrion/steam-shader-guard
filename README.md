@@ -135,6 +135,11 @@ It preserves subsequent edits and refuses to remove the program when a known
 modified/manual launch option still references it. Remove manual references first,
 including custom launchers outside the Steam accounts known to the tool.
 
+Options are command-specific, as shown by `--help`; unsupported or duplicate
+options are errors rather than silently ignored. In particular, `uninstall` does
+not accept an app ID or account selector. Use `disable APPID --apply` to disconnect
+one game; it restores that game's tracked entries across accounts.
+
 Original caches, recovered seed files, new shaders and the small state journal
 are retained. It does not delete gigabytes of cache as a side effect of uninstalling.
 
