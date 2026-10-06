@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Reject command-inappropriate arguments and duplicate options before any writes.
+- Match Steam VDF keys case-insensitively and reject case-variant duplicate keys.
+- Keep the executable when uninstall cannot inspect known accounts or menu entries.
+- Keep the executable when a symlinked menu entry still references it, even if its
+  contents match the originally installed menu entry.
+- Preserve both installed and pending hashes so interrupted installation updates
+  can be retried or uninstalled safely.
+- Recognize equivalent Steam cache paths containing trailing or repeated slashes
+  and `.` components instead of bypassing cache isolation.
+- Reject recovery destinations inside the source before creating directories.
+- Treat empty XDG directory variables as unset, using the documented defaults.
+- Add regression tests demonstrating the failures and covering interrupted-journal
+  recovery; document process-isolated CLI testing.
 - GitHub Actions CI on Rust 1.99.0 for formatting, Clippy and GNU/musl tests.
 - Version-tag releases with verified static executables, source, notices and
   regenerated SHA-256 manifests; prerelease tags are supported.

@@ -11,6 +11,10 @@ pub struct Game {
 }
 
 fn root(paths: &Paths, args: &Args) -> Result<PathBuf> {
+    find_root(paths, args)?
+        .ok_or_else(|| "Native Steam installation not found; use --steam-root PATH".into())
+}
+fn find_root(paths: &Paths, args: &Args) -> Result<Option<PathBuf>> {
     let candidates = args.root.clone().map(|p| vec![p]).unwrap_or_else(|| {
         vec![
             paths.home.join(".local/share/Steam"),
@@ -19,7 +23,12 @@ fn root(paths: &Paths, args: &Args) -> Result<PathBuf> {
         ]
     });
     for path in candidates {
-        if path.join("steamapps").is_dir() {
+        let metadata = match fs::metadata(path.join("steamapps")) {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.into()),
+        };
+        if metadata.is_dir() {
             let path = path.canonicalize()?;
             if path
                 .components()
@@ -27,10 +36,10 @@ fn root(paths: &Paths, args: &Args) -> Result<PathBuf> {
             {
                 return fail("Flatpak and Snap Steam are not supported in version 0.1");
             }
-            return Ok(path);
+            return Ok(Some(path));
         }
     }
-    fail("Native Steam installation not found; use --steam-root PATH")
+    Ok(None)
 }
 pub fn games(root: &Path) -> Result<Vec<Game>> {
     let mut libraries = BTreeSet::from([root.to_path_buf()]);
@@ -184,20 +193,24 @@ pub fn install(paths: &Paths, apply: bool) -> Result<()> {
         ),
         (icon, desktop.into_bytes(), 0o644),
     ];
+    let mut current_hashes = BTreeMap::new();
     for (path, _, _) in &updates {
         if path.is_symlink() {
             return fail("Installation target is a symlink");
         }
-        if path.exists()
-            && !state
+        if path.try_exists()? {
+            let current_hash = cache::digest_file(path)?;
+            if !state
                 .files
                 .get(path)
-                .is_some_and(|e| cache::digest_file(path).ok().as_ref() == Some(&e.after_hash))
-        {
-            return fail(format!(
-                "Preserving existing or modified file: {}",
-                path.display()
-            ));
+                .is_some_and(|e| e.matches_hash(&current_hash))
+            {
+                return fail(format!(
+                    "Preserving existing or modified file: {}",
+                    path.display()
+                ));
+            }
+            current_hashes.insert(path.clone(), current_hash);
         }
     }
     for (path, bytes, mode) in updates {
@@ -205,10 +218,23 @@ pub fn install(paths: &Paths, apply: bool) -> Result<()> {
             before: None,
             before_mode: mode,
             after_hash: String::new(),
+            pending_hash: None,
         });
-        entry.after_hash = hash(&bytes);
+        if let Some(current_hash) = current_hashes.remove(&path) {
+            entry.after_hash = current_hash;
+        }
+        entry.pending_hash = Some(hash(&bytes));
         atomic_json(&paths.state_file(), &state)?; // Journal before each reversible write.
         atomic_write(&path, &bytes, mode)?;
+        let entry = state
+            .files
+            .get_mut(&path)
+            .ok_or("Missing managed file journal")?;
+        entry.after_hash = entry
+            .pending_hash
+            .take()
+            .ok_or("Missing pending file hash")?;
+        atomic_json(&paths.state_file(), &state)?;
     }
     println!(
         "Installed. Start Steam through 'Steam (Shader Guard)'. Enable each game's cache profile separately."
@@ -268,7 +294,7 @@ pub fn enable(paths: &Paths, args: &Args) -> Result<()> {
     if !state
         .files
         .get(&paths.bin)
-        .is_some_and(|e| cache::digest_file(&paths.bin).ok().as_ref() == Some(&e.after_hash))
+        .is_some_and(|e| cache::digest_file(&paths.bin).is_ok_and(|hash| e.matches_hash(&hash)))
     {
         return fail("Run install --apply first; the managed program must be present");
     }
@@ -296,6 +322,14 @@ pub fn enable(paths: &Paths, args: &Args) -> Result<()> {
         "Launch options saved. Shader recovery is separate; newly encountered shaders may still compile."
     );
     Ok(())
+}
+
+fn read_config(path: &Path) -> Result<Option<String>> {
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) -> Result<()> {
@@ -328,16 +362,15 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         .iter()
         .filter(|a| id.is_none_or(|id| a.appid == id))
     {
-        if !entry.config.exists() {
-            continue;
-        }
-        let pair = edits
-            .entry(entry.config.clone())
-            .or_insert_with(|| (String::new(), String::new()));
-        if pair.0.is_empty() {
-            pair.0 = fs::read_to_string(&entry.config)?;
-            pair.1 = pair.0.clone();
-        }
+        let pair = match edits.entry(entry.config.clone()) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let Some(original) = read_config(entry.key())? else {
+                    continue;
+                };
+                entry.insert((original.clone(), original))
+            }
+        };
         let doc = Vdf::parse(pair.1.clone())?;
         let mut key = PREFIX.to_vec();
         key.extend([&entry.appid, "LaunchOptions"]);
@@ -375,23 +408,34 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         // Also inspect accounts in the default Steam installation, if available.
         let mut configs = known_configs;
         let mut roots = state.steam_roots.clone();
-        if let Ok(steam_root) = root(paths, &Args::default()) {
+        if let Some(steam_root) = find_root(paths, &Args::default())? {
             roots.insert(steam_root);
         }
         for steam_root in roots {
-            if let Ok(accounts) = fs::read_dir(steam_root.join("userdata")) {
-                for account in accounts.flatten() {
-                    let config = account.path().join("config/localconfig.vdf");
-                    if config.is_file() {
-                        configs.insert(config);
-                    }
+            let accounts = match fs::read_dir(steam_root.join("userdata")) {
+                Ok(accounts) => accounts,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e.into()),
+            };
+            for account in accounts {
+                let account = account?;
+                let metadata = match fs::metadata(account.path()) {
+                    Ok(metadata) => metadata,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(e) => return Err(e.into()),
+                };
+                if metadata.is_dir() {
+                    configs.insert(account.path().join("config/localconfig.vdf"));
                 }
             }
         }
-        for config in configs.into_iter().filter(|p| p.is_file()) {
-            let doc = Vdf::parse(fs::read_to_string(config)?)?;
+        for config in configs {
+            let Some(text) = read_config(&config)? else {
+                continue;
+            };
+            let doc = Vdf::parse(text)?;
             if let Some(Value::Map(apps)) = doc.get(&PREFIX) {
-                if apps.values().any(|value| matches!(value, Value::Map(fields) if matches!(fields.get("LaunchOptions"), Some(Value::Text(option)) if option.contains("steam-shader-guard")))) {
+                if apps.values().any(|value| matches!(value, Value::Map(fields) if matches!(fields.get("launchoptions"), Some(Value::Text(option)) if option.contains("steam-shader-guard")))) {
                     return fail("A Steam launch option still references Shader Guard; remove it manually before uninstalling");
                 }
             }
@@ -399,11 +443,9 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         // Do not remove a binary still referenced by a changed managed desktop entry.
         for (path, record) in &state.files {
             if path != &paths.bin
-                && path.exists()
-                && cache::digest_file(path)? != record.after_hash
-                && fs::read_to_string(path)
-                    .unwrap_or_default()
-                    .contains("steam-shader-guard")
+                && path.try_exists()?
+                && (path.is_symlink() || !record.matches_hash(&cache::digest_file(path)?))
+                && fs::read_to_string(path)?.contains("steam-shader-guard")
             {
                 return fail(
                     "A modified menu entry still references Shader Guard; program retained",
@@ -412,10 +454,10 @@ pub fn disable(paths: &Paths, id: Option<&str>, apply: bool, uninstall: bool) ->
         }
         let files = std::mem::take(&mut state.files);
         for (path, record) in files {
-            if !path.exists() {
+            if !path.try_exists()? {
                 continue;
             }
-            if path.is_symlink() || cache::digest_file(&path)? != record.after_hash {
+            if path.is_symlink() || !record.matches_hash(&cache::digest_file(&path)?) {
                 println!("Preserved modified file: {}", path.display());
                 continue;
             }
@@ -442,8 +484,8 @@ pub fn game_environment(
         .get("__GL_SHADER_DISK_CACHE_PATH")
         .map(String::as_str)
         .unwrap_or("");
-    let steam_suffix = format!("/steamapps/shadercache/{id}/nvidiav1");
-    if !existing.is_empty() && !existing.ends_with(&steam_suffix) {
+    let steam_suffix = format!("steamapps/shadercache/{id}/nvidiav1");
+    if !existing.is_empty() && !Path::new(existing).ends_with(&steam_suffix) {
         return Ok(out);
     }
     let directory = paths.app(id).join("nvidia");

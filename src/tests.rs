@@ -160,6 +160,19 @@ fn failed_recovery_publishes_nothing() {
     assert_eq!(fs::read_dir(dest.parent().unwrap()).unwrap().count(), 0);
 }
 #[test]
+fn rejected_recovery_does_not_create_directories_inside_source() {
+    let t = tempfile::tempdir().unwrap();
+    let source = t.path().join("source");
+    fixture(&source, 1);
+    for parent in [source.clone(), t.path().join("source-link")] {
+        if parent != source {
+            symlink(&source, &parent).unwrap();
+        }
+        assert!(cache::recover(&source, &parent.join("new/42"), 120).is_err());
+        assert!(!source.join("new").exists());
+    }
+}
+#[test]
 fn rename_cannot_overwrite_existing_directory() {
     let t = tempfile::tempdir().unwrap();
     let a = t.path().join("a");
@@ -219,6 +232,29 @@ fn vdf_refuses_ambiguous_or_broken_input() {
     }
 }
 #[test]
+fn vdf_keys_are_case_insensitive_without_rewriting_unrelated_bytes() {
+    let text = "\"ROOT\" { \"KeepCase\" \"KeepValue\" \"launchoptions\" \"old\" }";
+    let doc = vdf::Vdf::parse(text.into()).unwrap();
+    assert_eq!(doc.text(&["root", "LaunchOptions"]), Some("old"));
+    let changed = doc.set(&["Root", "LaunchOptions"], Some("new")).unwrap();
+    assert!(changed.contains("\"KeepCase\" \"KeepValue\""));
+    let parsed = vdf::Vdf::parse(changed).unwrap();
+    assert_eq!(parsed.text(&["ROOT", "LAUNCHOPTIONS"]), Some("new"));
+    let removed = parsed.set(&["root", "launchoptions"], None).unwrap();
+    assert!(
+        vdf::Vdf::parse(removed)
+            .unwrap()
+            .get(&["ROOT", "LaunchOptions"])
+            .is_none()
+    );
+}
+#[test]
+fn vdf_rejects_case_variant_duplicate_keys() {
+    assert!(
+        vdf::Vdf::parse("\"LaunchOptions\" \"first\" \"launchoptions\" \"second\"".into()).is_err()
+    );
+}
+#[test]
 fn game_cache_is_isolated_and_explicit_overrides_survive() {
     let t = tempfile::tempdir().unwrap();
     let p = fake_paths(t.path());
@@ -242,6 +278,22 @@ fn game_cache_is_isolated_and_explicit_overrides_survive() {
     assert!(!out.contains_key("__GL_SHADER_DISK_CACHE_READ_ONLY_APP_NAME"));
     let custom = BTreeMap::from([("__GL_SHADER_DISK_CACHE_PATH".into(), "/my/cache".into())]);
     assert_eq!(steam::game_environment(&p, "42", &custom).unwrap(), custom);
+}
+#[test]
+fn steam_cache_path_suffix_is_compared_as_a_path() {
+    let t = tempfile::tempdir().unwrap();
+    let p = fake_paths(t.path());
+    for path in [
+        "/games/steamapps/shadercache/42/nvidiav1/",
+        "/games/steamapps//shadercache/42/./nvidiav1",
+    ] {
+        let env = BTreeMap::from([("__GL_SHADER_DISK_CACHE_PATH".into(), path.into())]);
+        let out = steam::game_environment(&p, "42", &env).unwrap();
+        assert_eq!(
+            out["__GL_SHADER_DISK_CACHE_PATH"],
+            p.app("42").join("nvidia").to_str().unwrap()
+        );
+    }
 }
 #[test]
 fn reads_exact_seed_names_and_rejects_path_traversal() {

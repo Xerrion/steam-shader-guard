@@ -50,6 +50,8 @@ and Wine games before recovering caches or editing launch options.
 `install` prints its plan first. With `--apply` it installs the program under
 `~/.local/bin` and adds **Steam (Shader Guard)** to your application menu.
 Your existing Steam shortcuts and shell configuration stay unchanged.
+If an installation update fails, fix the reported filesystem error and rerun
+`install --apply`; the journal recognizes both sides of an interrupted file update.
 
 For an affected game, replace `2357570` with its Steam app ID:
 
@@ -132,8 +134,16 @@ Close Steam and Wine games first:
 
 The tool restores tracked launch options only when they still match its changes.
 It preserves subsequent edits and refuses to remove the program when a known
-modified/manual launch option still references it. Remove manual references first,
+modified/manual launch option or modified menu entry still references it, including
+a menu entry replaced with a symlink. It also refuses removal when permission or
+read errors prevent those checks. Remove manual references first,
 including custom launchers outside the Steam accounts known to the tool.
+Steam VDF keys are matched case-insensitively; unrelated text is preserved.
+
+Options are command-specific, as shown by `--help`; unsupported or duplicate
+options are errors rather than silently ignored. In particular, `uninstall` does
+not accept an app ID or account selector. Use `disable APPID --apply` to disconnect
+one game; it restores that game's tracked entries across accounts.
 
 Original caches, recovered seed files, new shaders and the small state journal
 are retained. It does not delete gigabytes of cache as a side effect of uninstalling.
@@ -148,7 +158,8 @@ are retained. It does not delete gigabytes of cache as a side effect of uninstal
 | Seed names and recovery report | Next to each game's `nvidia` directory |
 | Reversible settings journal | `~/.local/state/steam-shader-guard/state.json` |
 
-`XDG_DATA_HOME` and `XDG_STATE_HOME` are honored. The optional `SHADER_GUARD_HOME`
+`XDG_DATA_HOME` and `XDG_STATE_HOME` are honored; unset or empty values use the
+defaults above. The optional `SHADER_GUARD_HOME`
 variable provides an isolated home directory for tests without changing `HOME`.
 The wrapper supplies a 12 GB driver cache-size preference unless a game explicitly
 sets another value. Read-only seeds use additional disk space; Steam/driver cleanup
@@ -207,6 +218,12 @@ The tests use temporary directories, including an actual sparse file crossing th
 4 GiB boundary. They do not write to the real Steam configuration or launch games.
 Integration tests need an ordinary non-root user and no running Steam/Wine processes
 visible in the test process namespace. No automated tests require a GPU.
+On systems allowing unprivileged user/PID namespaces, tests can run without
+disturbing a running Steam session:
+
+```sh
+unshare --user --map-current-user --pid --fork --mount-proc cargo test --locked
+```
 
 ## Releases
 

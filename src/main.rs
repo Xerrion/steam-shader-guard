@@ -103,7 +103,10 @@ impl Paths {
             return fail("Home directory must be absolute");
         }
         let xdg = |key: &str, default: PathBuf| -> Result<PathBuf> {
-            let path = std::env::var_os(key).map(PathBuf::from).unwrap_or(default);
+            let path = std::env::var_os(key)
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or(default);
             if !path.is_absolute() {
                 return fail(format!("{key} must be absolute"));
             }
@@ -138,6 +141,13 @@ struct ManagedFile {
     before: Option<Vec<u8>>,
     before_mode: u32,
     after_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pending_hash: Option<String>,
+}
+impl ManagedFile {
+    fn matches_hash(&self, hash: &str) -> bool {
+        self.after_hash == hash || self.pending_hash.as_deref() == Some(hash)
+    }
 }
 #[derive(Serialize, Deserialize)]
 struct ManagedApp {
@@ -251,11 +261,26 @@ struct Args {
     root: Option<PathBuf>,
     source: Option<PathBuf>,
 }
-fn parse(args: Vec<OsString>) -> Result<Args> {
+fn parse(command: &str, args: Vec<OsString>) -> Result<Args> {
+    let allowed: &[&str] = match command {
+        "doctor" => &["--steam-root"],
+        "scan" => &["--source", "--steam-root"],
+        "recover" => &["--source", "--steam-root", "--apply"],
+        "install" | "disable" | "uninstall" => &["--apply"],
+        "enable" => &["--all", "--account", "--steam-root", "--apply"],
+        _ => return fail("Unknown command; use --help"),
+    };
     let mut out = Args::default();
+    let mut seen = std::collections::BTreeSet::new();
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
-        match arg.to_str().ok_or("Option is not valid UTF-8")? {
+        let arg = arg.to_str().ok_or("Option is not valid UTF-8")?;
+        if arg.starts_with('-') && (!allowed.contains(&arg) || !seen.insert(arg.to_string())) {
+            return fail(format!(
+                "Unknown or duplicate argument for {command}: {arg}"
+            ));
+        }
+        match arg {
             "--apply" => out.apply = true,
             "--all" => out.all = true,
             "--steam-root" => out.root = Some(args.next().ok_or("Missing root path")?.into()),
@@ -268,7 +293,13 @@ fn parse(args: Vec<OsString>) -> Result<Args> {
                         .map_err(|_| "Invalid account ID")?,
                 )
             }
-            value if !value.starts_with('-') && out.id.is_none() => out.id = Some(value.into()),
+            value
+                if !value.starts_with('-')
+                    && out.id.is_none()
+                    && matches!(command, "scan" | "recover" | "enable" | "disable") =>
+            {
+                out.id = Some(value.into())
+            }
             value => return fail(format!("Unknown or duplicate argument: {value}")),
         }
     }
@@ -303,8 +334,9 @@ fn entry() -> Result<()> {
     if command == "steam" {
         return steam::run_steam(rest);
     }
-    let args = parse(rest)?;
-    match command.to_str().ok_or("Invalid command")? {
+    let command = command.to_str().ok_or("Invalid command")?;
+    let args = parse(command, rest)?;
+    match command {
         "doctor" => steam::doctor(&paths, &args),
         "scan" | "recover" => {
             let id = args.id.as_deref().ok_or("Specify a Steam app ID")?;

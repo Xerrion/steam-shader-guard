@@ -1,4 +1,5 @@
 //! Lossless text VDF scalar edits. Unrelated bytes are preserved.
+//! Map keys and lookup paths are ASCII case-insensitive, as in Steam KeyValues.
 use crate::{Result, fail};
 use std::collections::BTreeMap;
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -122,13 +123,14 @@ impl Vdf {
             if !key.quoted || *i + 1 >= t.len() {
                 return fail("Missing VDF key or value");
             }
-            if out.contains_key(&key.text) {
+            let name = key.text.to_ascii_lowercase();
+            if out.contains_key(&name) {
                 return fail("Duplicate VDF key; refusing ambiguous configuration");
             }
             let value = &t[*i + 1];
             *i += 2;
             let mut child = path.clone();
-            child.push(key.text.clone());
+            child.push(name.clone());
             let parsed = if !value.quoted && value.text == "{" {
                 self.section(t, i, child)?
             } else if value.quoted {
@@ -137,7 +139,7 @@ impl Vdf {
             } else {
                 return fail("Unexpected VDF value");
             };
-            out.insert(key.text.clone(), parsed);
+            out.insert(name, parsed);
         }
         if !path.is_empty() {
             return fail("Missing closing VDF brace");
@@ -149,7 +151,7 @@ impl Vdf {
         let mut v = &self.data;
         for part in path {
             if let Value::Map(m) = v {
-                v = m.get(*part)?;
+                v = m.get(&part.to_ascii_lowercase())?;
             } else {
                 return None;
             }
@@ -175,7 +177,7 @@ impl Vdf {
         for part in &path[..path.len() - 1] {
             if let Value::Map(m) = node {
                 node = m
-                    .entry(part.to_string())
+                    .entry(part.to_ascii_lowercase())
                     .or_insert_with(|| Value::Map(BTreeMap::new()));
             } else {
                 return fail("VDF scalar where section was expected");
@@ -183,14 +185,20 @@ impl Vdf {
         }
         if let Value::Map(m) = node {
             if let Some(value) = value {
-                m.insert(path[path.len() - 1].into(), Value::Text(value.into()));
+                m.insert(
+                    path[path.len() - 1].to_ascii_lowercase(),
+                    Value::Text(value.into()),
+                );
             } else {
-                m.remove(path[path.len() - 1]);
+                m.remove(&path[path.len() - 1].to_ascii_lowercase());
             }
         } else {
             return fail("VDF scalar parent");
         }
-        let key = path.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let key = path
+            .iter()
+            .map(|s| s.to_ascii_lowercase())
+            .collect::<Vec<_>>();
         let quote = |v: &str| {
             format!(
                 "\"{}\"",

@@ -248,6 +248,19 @@ pub fn recover(source: &Path, destination: &Path, limit: u64) -> Result<Vec<Repo
     let parent = destination
         .parent()
         .ok_or("Destination needs a parent directory")?;
+    // Check existing ancestors before mkdir can change the source tree.
+    for ancestor in parent.ancestors() {
+        match ancestor.canonicalize() {
+            Ok(path) => {
+                if path.starts_with(&source) {
+                    return fail("Source and output must be separate");
+                }
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
     fs::create_dir_all(parent)?;
     let destination = parent
         .canonicalize()?
