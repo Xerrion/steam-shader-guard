@@ -47,7 +47,7 @@ fn tokens(text: &str) -> Result<Vec<Token>> {
             continue;
         }
         if b[i] != b'"' {
-            return fail("Unsupported VDF syntax");
+            return fail("A Steam file uses a layout this version does not understand.");
         }
         i += 1;
         let mut bytes = Vec::new();
@@ -61,7 +61,7 @@ fn tokens(text: &str) -> Result<Vec<Token>> {
             if b[i] == b'\\' {
                 i += 1;
                 if i >= b.len() {
-                    return fail("Truncated VDF escape");
+                    return fail("A Steam file ends in the middle of an escaped text value.");
                 }
                 match b[i] {
                     b'n' => bytes.push(b'\n'),
@@ -78,7 +78,7 @@ fn tokens(text: &str) -> Result<Vec<Token>> {
             i += 1;
         }
         if !closed {
-            return fail("Unterminated VDF string");
+            return fail("A Steam file has an unfinished text value. It may be incomplete.");
         }
         result.push(Token {
             text: String::from_utf8(bytes)?,
@@ -101,31 +101,35 @@ impl Vdf {
         let mut position = 0;
         this.data = this.section(&items, &mut position, vec![])?;
         if position != items.len() {
-            return fail("Trailing VDF tokens");
+            return fail("A Steam file has unexpected data after its settings.");
         }
         Ok(this)
     }
     fn section(&mut self, t: &[Token], i: &mut usize, path: Vec<String>) -> Result<Value> {
         if path.len() > 64 {
-            return fail("VDF nesting too deep");
+            return fail(
+                "A Steam file has more nested settings than this version can safely read.",
+            );
         }
         let mut out = BTreeMap::new();
         while *i < t.len() {
             let key = &t[*i];
             if !key.quoted && key.text == "}" {
                 if path.is_empty() {
-                    return fail("Unexpected closing VDF brace");
+                    return fail("A Steam file has an unexpected closing '}' character.");
                 }
                 self.sections.insert(path, key.start);
                 *i += 1;
                 return Ok(Value::Map(out));
             }
             if !key.quoted || *i + 1 >= t.len() {
-                return fail("Missing VDF key or value");
+                return fail("A Steam file has a setting with a missing name or value.");
             }
             let name = key.text.to_ascii_lowercase();
             if out.contains_key(&name) {
-                return fail("Duplicate VDF key; refusing ambiguous configuration");
+                return fail(
+                    "A Steam file contains duplicate setting names. The tool cannot choose one safely.",
+                );
             }
             let value = &t[*i + 1];
             *i += 2;
@@ -137,12 +141,12 @@ impl Vdf {
                 self.scalars.insert(child, (key.start, value.end));
                 Value::Text(value.text.clone())
             } else {
-                return fail("Unexpected VDF value");
+                return fail("A Steam setting has a value this version cannot safely read.");
             };
             out.insert(name, parsed);
         }
         if !path.is_empty() {
-            return fail("Missing closing VDF brace");
+            return fail("A Steam file is missing a closing '}' character. It may be incomplete.");
         }
         self.sections.insert(path, self.text.len());
         Ok(Value::Map(out))
@@ -167,7 +171,7 @@ impl Vdf {
     }
     pub fn set(&self, path: &[&str], value: Option<&str>) -> Result<String> {
         if path.is_empty() {
-            return fail("Empty VDF path");
+            return fail("The tool could not identify the Steam setting to edit.");
         }
         if self.get(path).is_none() && value.is_none() {
             return Ok(self.text.clone());
@@ -180,7 +184,9 @@ impl Vdf {
                     .entry(part.to_ascii_lowercase())
                     .or_insert_with(|| Value::Map(BTreeMap::new()));
             } else {
-                return fail("VDF scalar where section was expected");
+                return fail(
+                    "A Steam setting contains text where a group of settings was expected.",
+                );
             }
         }
         if let Value::Map(m) = node {
@@ -193,7 +199,7 @@ impl Vdf {
                 m.remove(&path[path.len() - 1].to_ascii_lowercase());
             }
         } else {
-            return fail("VDF scalar parent");
+            return fail("The Steam setting to edit is inside an unexpected text value.");
         }
         let key = path
             .iter()
@@ -216,7 +222,9 @@ impl Vdf {
         } else {
             let mut parent = key[..key.len() - 1].to_vec();
             while !self.sections.contains_key(&parent) {
-                let name = parent.pop().ok_or("Missing root VDF section")?;
+                let name = parent
+                    .pop()
+                    .ok_or("The tool could not find the main group of Steam settings.")?;
                 replacement = format!("{}\n{{\n{}\n}}", quote(&name), replacement);
             }
             replacement = format!("\n{replacement}\n");
@@ -230,7 +238,9 @@ impl Vdf {
             &self.text[end..]
         );
         if Self::parse(new.clone())?.data != expected {
-            return fail("Unrelated VDF data would change");
+            return fail(
+                "Editing this game setting would change other Steam settings. The update was refused.",
+            );
         }
         Ok(new)
     }
