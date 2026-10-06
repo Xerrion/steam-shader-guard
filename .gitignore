@@ -1,3 +1,5 @@
 /target/
 /dist/
 /steam-shader-guard
+__pycache__/
+*.pyc
