@@ -250,7 +250,7 @@ packager rejects executables with a dynamic interpreter/dependency or a mismatch
 version. Assets are:
 
 - `steam-shader-guard-<version>-x86_64-unknown-linux-musl.tar.gz`
-- `steam-shader-guard-<version>-x86_64-unknown-linux-musl`, the standalone executable
+- `steam-shader-guard`, the standalone executable
 - `SHA256SUMS`, containing the archive and executable checksums
 
 The archive contains the executable, user guides, changelog, and required license
@@ -264,8 +264,8 @@ notices. Run `sha256sum --check SHA256SUMS` inside the extracted directory.
 The packager generates fresh checksums instead of copying the repository manifest.
 
 For a direct executable download, verify it against `SHA256SUMS` with the same
-`--ignore-missing` command. Mark it executable with `chmod +x` and rename it to
-`steam-shader-guard`. Dependency license notices are available in the archive.
+`--ignore-missing` command. Mark it executable with `chmod +x steam-shader-guard`.
+Dependency license notices are available in the archive.
 
 To build the same package locally (Python 3.11+ and `readelf` from binutils are
 needed only for release tooling, not for the program at runtime):

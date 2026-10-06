@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Name the standalone executable `steam-shader-guard`.
 - Publish a standalone executable and a runtime archive without project source,
   tests, workflows, or build tooling. Keep user documentation and license notices.
 - Generate SHA-256 checksums for both downloadable assets.
