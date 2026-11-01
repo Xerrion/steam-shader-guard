@@ -76,6 +76,11 @@ The command checks the original files, makes a separate copy and checks the copy
 It shows which file it is checking or copying. The originals stay unchanged.
 This does not set up the game.
 
+Even faithfully restored shader entries may not be reused by the NVIDIA driver.
+A [manual Overwatch 2 field report](VALIDATION.md#external-field-report-manual-isolated-cache-experiment)
+found matching cache keys with different records and continued shader-thread
+activity on relaunch. The reporter did not test the Shader Guard program.
+
 If `doctor` shows **not found** under **Steam shader folder**, skip this step.
 Without a copy, the game starts with an empty Shader Guard cache and builds it
 as you play.
